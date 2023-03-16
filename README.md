@@ -11,7 +11,7 @@ BY: Northwestern University Transportation Center (NUTC) and Argonne National La
 
 Principal Investigators: Hani S. Mahmassani (NUTC), Pablo Durango-Cohen (NUTC), Amgad Elgowainy (ANL), Yan (Joann) Zhou (ANL)
 
-Researchers: Adrian Hernandez, Max Ng, ‪Choudhury Nazib Siddique
+Researchers: Adrian Hernandez (NUTC), Max Ng (NUTC), ‪Choudhury Nazib Siddique (ANL)
 
 The transportation sector is the largest contributor of greenhouse gas (GHG) emissions in the US, with the freight sector showing the greatest challenge to decarbonize. However, recent advances in lower-carbon fuels, battery technologies, and hydrogen fuels have provided viable alternatives to diesel for the traditionally hard-to-decarbonize freight rail industry.
 
