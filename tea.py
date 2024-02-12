@@ -1,3 +1,4 @@
+import networkx as nx
 import numpy as np
 
 from helper import load_fuel_tech_eff_factor, load_conversion_factors, load_railroad_values, \
@@ -115,13 +116,15 @@ def tea_battery(peak_loc: float, avg_loc: float, avg_mwh: float, elec_rate: floa
 
 
 def tea_battery_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_type: str = None,
-                               clean_energy_cost: float = None):
+                               clean_energy_cost: float = None, tender_cost_p_tonmi: float = None,
+                               diesel_cost_p_gal: float = None) -> nx.DiGraph:
     """
     Compute aggregate statistics for battery technology deployment in all facilities. Use the percentage of ton-mi increase
     to calculate all in terms of baseline ton-miles.
 
     Parameters
     ----------
+    tender_cost_p_tonmi
     G : nx.DiGraph
         Graph containing all the facilities and edges.
     max_util : float, optional
@@ -149,7 +152,7 @@ def tea_battery_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_ty
     ft_ef = load_fuel_tech_eff_factor().loc[ds['fuel_type']]  # fuel tech efficiency factors
     # lookup dataframes for constants
     rr_v = load_railroad_values().loc[ds['railroad']]
-    cf = load_conversion_factors()['Value'] # numerical constants for conversion across units
+    cf = load_conversion_factors()['Value']  # numerical constants for conversion across units
     eff_kwh_p_batt = ds['eff_kwh_p_batt']   # effective battery capacity
     # calculate conversion factor from ton-miles to kwh
     tonmi2kwh = (rr_v['Energy intensity (btu/ton-mi)'] * (1 / cf['btu/kwh']) *
@@ -158,6 +161,7 @@ def tea_battery_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_ty
     batt_p_loc = tonmi2kwh * rr_v['ton/loc'] * ds['range_mi'] * (1 / eff_kwh_p_batt)
     # store listed kwh per battery in graph data
     G.graph['scenario']['listed_kwh_p_batt'] = eff_kwh_p_batt * (1 / ft_ef['Effective capacity'])
+    G.graph['scenario']['batt_p_loc'] = batt_p_loc
 
     comm_list = list({c for u, v in G.edges for c in G.edges[u, v]['battery_avg_ton'].keys()})
     # create dictionary of ton-mile deflation factors for each commodity
@@ -168,6 +172,8 @@ def tea_battery_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_ty
     # replace any zero values with 1
     battery_tonmi.update({c: battery_tonmi[c] if battery_tonmi[c] > 0 else 1 for c in comm_list})
 
+    # car_dol_hr = 0  # [$/hr] delay cost per car-hr
+    # car_dol_hr_im = 0  # [$/hr] delay cost per car-hr for intermodal
     car_dol_hr = 8.42       # [$/hr] delay cost per car-hr
     car_dol_hr_im = 26.95   # [$/hr] delay cost per car-hr for intermodal
     # delay_tonmi for IM
@@ -178,7 +184,7 @@ def tea_battery_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_ty
         # if there is a facilit located at n
         if G.nodes[n]['facility'] == 1:
             # if the facility is merely an energy transfer point (does not consume energy from the grid)
-            if G.nodes[n]['avg']['energy_transfer']:
+            if 'energy_transfer' in G.nodes[n]['avg'].keys() and G.nodes[n]['avg']['energy_transfer']:
                 # apply tea_battery function to compute the costs based on the peak and average number of locomotives
                 G.nodes[n]['energy_source_TEA'] = tea_battery(np.ceil(G.nodes[n]['peak']['number_loc'] * batt_p_loc),
                                                               np.ceil(G.nodes[n]['avg']['number_loc'] * batt_p_loc),
@@ -248,15 +254,20 @@ def tea_battery_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_ty
     # calculate the peak energy consumed [kWh] by commodity
     peak_battery_energy_kwh = {c: sum(G.edges[u, v]['battery_peak_kwh'][c] for u, v in G.edges) for c in comm_list}
 
+    if tender_cost_p_tonmi is None:
+        tender_cost_p_tonmi = rr_v['battery $/ton-mile']
     # load battery $/ton-mi; cost of battery is with respect to nameplate capacity, not effective capacity
-    battery_LCO_tonmi = batt_p_loc * rr_v['battery $/ton-mile'] * (1 / ft_ef['Effective capacity'])
+    battery_LCO_tonmi = batt_p_loc * tender_cost_p_tonmi * (1 / ft_ef['Effective capacity'])
     # convert to battery $/kWh by commodity
     battery_LCO_kwh = {c: battery_LCO_tonmi * battery_tonmi[c] /
                           avg_battery_energy_kwh[c] if avg_battery_energy_kwh[c] > 0 else 0 for c in comm_list}
 
-    # load dataframe for cost factors of diesel: index is fuel_type, column is value in [$/gal]
-    df_dropin = load_tea_dropin_lookup()
-    diesel_factor = df_dropin.loc['diesel', '$/gal']
+    if diesel_cost_p_gal is None:
+        # load dataframe for cost factors of diesel: index is fuel_type, column is value in [$/gal]
+        df_dropin = load_tea_dropin_lookup()
+        diesel_factor = df_dropin.loc['diesel', '$/gal']
+    else:
+        diesel_factor = diesel_cost_p_gal
     # calculate the total of average number of locomotives
     avg_tot_loc = sum([G.nodes[n]['avg']['number_loc'] for n in G if G.nodes[n]['facility']])
     if round(avg_tot_loc) == 0:
@@ -416,6 +427,329 @@ def tea_battery_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_ty
     return G
 
 
+def tea_hybrid(G: nx.DiGraph, max_util: float = 0.88, station_type: str = None, clean_energy_cost: float = None,
+               tender_cost_p_tonmi: float = None, diesel_cost_p_gal: float = None) -> nx.DiGraph:
+    """
+    Compute aggregate statistics for battery technology deployment in all facilities. Use the percentage of ton-mi increase
+    to calculate all in terms of baseline ton-miles.
+
+    Parameters
+    ----------
+    tender_cost_p_tonmi
+    G : nx.DiGraph
+        Graph containing all the facilities and edges.
+    max_util : float, optional
+        Maximum station utilization, by default 0.88
+    station_type : str, optional
+        Type of station, by default None
+    clean_energy_cost : float, optional
+        Cost of clean energy, by default None
+
+    Returns
+    -------
+    None
+    """
+    # compute aggregate statistics for tech. deployment
+    # use the percentage of ton-mi increase to calculate all in terms of baseline ton-miles
+
+    if clean_energy_cost is None:
+        clean_energy_cost = 0
+
+    # cost of electricity for each node based on state rates in [$/MWh]
+    cost_p_location = elec_rate_state(G, clean_elec_prem_dolkwh=clean_energy_cost)
+
+    fuel_type = G.graph['scenario']['fuel_type']
+    fuel_type_battery = fuel_type + '_battery'
+    fuel_type_diesel = fuel_type + '_diesel'
+
+    # load fuel technology factors
+    ft_ef = load_fuel_tech_eff_factor().loc['battery']  # fuel tech efficiency factor for battery locos
+    rr_v = load_railroad_values().loc[G.graph['railroad']]
+    # number of batteries per locomotive
+    batt_p_loc = 1
+    # store listed kwh per battery in graph data
+    # G.graph['scenario']['listed_kwh_p_batt'] = eff_kwh_p_batt * (1 / ft_ef['Effective capacity'])
+    G.graph['scenario']['batt_p_loc'] = batt_p_loc
+    # listed_kwh_p_loc = G.graph['operations']['listed_kwh_p_loc']
+
+    comm_list = list({c for u, v in G.edges for c in G.edges[u, v][fuel_type + '_avg_ton'].keys()})
+    # create dictionary of ton-mile deflation factors for each commodity
+    tonmi_deflation_factor = {c: 1 - G.graph['operations']['perc_tonmi_inc'][c] / 100 for c in comm_list}
+    # calculate total battery ton-miles for each commodity
+    hybrid_tonmi = {c: sum([G.edges[u, v][fuel_type + '_avg_ton'][c] * G.edges[u, v]['miles']
+                            for u, v in G.edges]) * tonmi_deflation_factor[c] for c in comm_list}
+    # replace any zero values with 1
+    hybrid_tonmi.update({c: hybrid_tonmi[c] if hybrid_tonmi[c] > 0 else 1 for c in comm_list})
+
+    # car_dol_hr = 0  # [$/hr] delay cost per car-hr
+    # car_dol_hr_im = 0  # [$/hr] delay cost per car-hr for intermodal
+    car_dol_hr = 8.42       # [$/hr] delay cost per car-hr
+    car_dol_hr_im = 26.95   # [$/hr] delay cost per car-hr for intermodal
+    # delay_tonmi for IM
+    im_share_tonmi = hybrid_tonmi['IM'] / hybrid_tonmi['TOTAL'] if hybrid_tonmi['TOTAL'] != 0 else 0
+
+    # for each node in G
+    for n in G:
+        # if there is a facility located at n
+        if G.nodes[n]['facility'] == 1:
+            # if the facility is merely an energy transfer point (does not consume energy from the grid)
+            if 'energy_transfer' in G.nodes[n]['avg'].keys() and G.nodes[n]['avg']['energy_transfer']:
+                # apply tea_battery function to compute the costs based on the peak and average number of locomotives
+                G.nodes[n]['energy_source_TEA'] = tea_battery(np.ceil(G.nodes[n]['peak']['number_loc'] * batt_p_loc),
+                                                              np.ceil(G.nodes[n]['avg']['number_loc'] * batt_p_loc),
+                                                              -G.nodes[n]['avg']['daily_demand_mwh'], 0,
+                                                              max_util=max_util, station_type=station_type)
+            # if the facility does consume energy from the grid
+            else:
+                # apply tea_battery function to compute the costs based on the peak and average number of locomotives
+                G.nodes[n]['energy_source_TEA'] = tea_battery(np.ceil(G.nodes[n]['peak']['number_loc'] * batt_p_loc),
+                                                              np.ceil(G.nodes[n]['avg']['number_loc'] * batt_p_loc),
+                                                              G.nodes[n]['avg']['daily_supply_mwh'],
+                                                              cost_p_location[n] / 1000,
+                                                              max_util=max_util, station_type=station_type)
+            # get the time required to charge per locomotive
+            charge_time = G.nodes[n]['energy_source_TEA']['charge_time']
+            # get the average and peak queue times and lengths
+            lq_avg, wq_avg = queue_model(G.nodes[n]['avg']['number_loc'] * batt_p_loc / 24,
+                                         1 / charge_time,
+                                         G.nodes[n]['energy_source_TEA']['number_chargers'])
+            lq_peak, wq_peak = queue_model(G.nodes[n]['peak']['number_loc'] * batt_p_loc / 24,
+                                           1 / charge_time,
+                                           G.nodes[n]['energy_source_TEA']['number_chargers'])
+            # update the TEA dictionary with the new values
+            G.nodes[n]['energy_source_TEA'].update(dict(
+                charge_time=charge_time,
+                avg_queue_time_p_loc=wq_avg,
+                avg_queue_length=lq_avg / batt_p_loc,
+                peak_queue_time_p_loc=wq_peak,
+                peak_queue_length=lq_peak / batt_p_loc,
+                avg_daily_delay_cost_p_car=(charge_time + wq_avg) * car_dol_hr,
+                avg_daily_delay_cost_p_loc=((charge_time + wq_avg) * car_dol_hr *
+                                            (rr_v['car/train'] / rr_v['loc/train'])),
+                total_daily_delay_cost=((car_dol_hr + (car_dol_hr_im - car_dol_hr) * im_share_tonmi) *
+                                        (charge_time + wq_avg) *
+                                        (rr_v['car/train'] / rr_v['loc/train']) * G.nodes[n]['avg']['number_loc'])
+            ))
+        # if there is no facility at node n
+        else:
+            G.nodes[n]['energy_source_TEA'] = tea_battery(0, 0, 0, 0, max_util=max_util, station_type=station_type)
+            G.nodes[n]['energy_source_TEA'].update(dict(
+                charge_time=0,
+                avg_queue_time_p_loc=0,
+                avg_queue_length=0,
+                peak_queue_time_p_loc=0,
+                peak_queue_length=0,
+                avg_daily_delay_cost_p_car=0,
+                avg_daily_delay_cost_p_loc=0,
+                total_daily_delay_cost=0
+            ))
+
+    # get the maximum charge time per locomotive of all the station locations
+    charge_time = max([G.nodes[n]['energy_source_TEA']['charge_time'] for n in G])
+    # calculate the support diesel ton-miles by commodity
+    support_diesel_tonmi = {c: sum([G.edges[u, v]['support_diesel_avg_ton'][c] * G.edges[u, v]['miles']
+                                    for u, v in G.edges]) * tonmi_deflation_factor[c] for c in comm_list}
+    # calculate the support diesel fuel consumption [gal] by commodity
+    support_diesel_gal = {c: sum([G.edges[u, v]['support_diesel_avg_gal'][c] for u, v in G.edges]) for c in comm_list}
+    # calculate the baseline (diesel) ton-miles by commodity
+    baseline_total_tonmi = {c: hybrid_tonmi[c] + support_diesel_tonmi[c] for c in comm_list}
+    # update to remove zero values (division issues)
+    baseline_total_tonmi.update({c: baseline_total_tonmi[c] if baseline_total_tonmi[c] > 0 else 1 for c in comm_list})
+    # calculate the average hybrid energy consumed [kWh] by commodity
+    avg_hybrid_battery_kwh = {c: sum(G.edges[u, v][fuel_type_battery + '_avg_kwh'][c] for u, v in G.edges)
+                              for c in comm_list}
+    # calculate the peak hybrid energy consumed [kWh] by commodity
+    peak_hybrid_battery_kwh = {c: sum(G.edges[u, v][fuel_type_battery + '_peak_kwh'][c] for u, v in G.edges)
+                               for c in comm_list}
+    # calculate the average gallons of hybrid diesel consumed [gal] by commodity
+    avg_hybrid_diesel_gal = {c: sum(G.edges[u, v][fuel_type_diesel + '_avg_gal'][c] for u, v in G.edges)
+                             for c in comm_list}
+    # calculate the peak gallons of hybrid diesel consumed [gal] by commodity
+    peak_hybrid_diesel_gal = {c: sum(G.edges[u, v][fuel_type_diesel + '_peak_gal'][c] for u, v in G.edges)
+                              for c in comm_list}
+
+    if tender_cost_p_tonmi is None:
+        tender_cost_p_tonmi = rr_v['battery $/ton-mile']
+    # load battery $/ton-mi; cost of battery is with respect to nameplate capacity, not effective capacity
+    battery_LCO_tonmi = batt_p_loc * tender_cost_p_tonmi * (1 / ft_ef['Effective capacity'])
+    # convert to battery $/kWh by commodity
+    battery_LCO_kwh = {c: (battery_LCO_tonmi * hybrid_tonmi[c] /
+                           avg_hybrid_battery_kwh[c]) if avg_hybrid_battery_kwh[c] > 0 else 0 for c in comm_list}
+
+    if diesel_cost_p_gal is None:
+        # load dataframe for cost factors of diesel: index is fuel_type, column is value in [$/gal]
+        df_dropin = load_tea_dropin_lookup()
+        diesel_factor = df_dropin.loc['diesel', '$/gal']
+    else:
+        diesel_factor = diesel_cost_p_gal
+
+    # calculate the total of average number of locomotives
+    avg_tot_loc = sum([G.nodes[n]['avg']['number_loc'] for n in G if G.nodes[n]['facility']])
+    if round(avg_tot_loc) == 0:
+        avg_tot_loc = 0
+    # calculate the total of peak number of locomotives
+    peak_tot_loc = sum([G.nodes[n]['peak']['number_loc'] for n in G if G.nodes[n]['facility']])
+    if round(peak_tot_loc) == 0:
+        peak_tot_loc = 0
+
+    # compute and store average TEA calculations as graph attributes
+    G.graph['energy_source_TEA'] = dict(
+        # avg station_LCO per kWh should be the total cost of the station (from peak value) over the avg usage
+        station_LCO_kwh=dict(zip(
+            comm_list,
+            [sum([G.nodes[n]['energy_source_TEA']['station_LCO'] * 1000 * G.nodes[n]['peak']['daily_supply_mwh']
+                  for n in G]) / avg_hybrid_battery_kwh['TOTAL'] for c in comm_list])),
+        # battery cost per kWh
+        battery_LCO_kwh=battery_LCO_kwh,
+        # O&M cost per kWh
+        om_LCO_kwh=dict(zip(
+            comm_list,
+            [sum([G.nodes[n]['energy_source_TEA']['om_LCO'] * 1000 * G.nodes[n]['avg']['daily_supply_mwh']
+                  for n in G]) / avg_hybrid_battery_kwh['TOTAL'] for c in comm_list])),
+        # electricity cost per kWh
+        energy_LCO_kwh=dict(zip(
+            comm_list,
+            [sum([G.nodes[n]['energy_source_TEA']['energy_LCO'] * 1000 * G.nodes[n]['avg']['daily_supply_mwh']
+                  for n in G]) / avg_hybrid_battery_kwh['TOTAL'] for c in comm_list])),
+        # estimated delay cost of charging and queuing per kWh
+        delay_LCO_kwh=dict(zip(
+            comm_list,
+            [sum([G.nodes[n]['energy_source_TEA']['total_daily_delay_cost'] for n in G]) /
+             avg_hybrid_battery_kwh['TOTAL'] for c in comm_list])),
+        # total cost per kWh
+        total_LCO_kwh=dict(zip(
+            comm_list,
+            [sum([G.nodes[n]['energy_source_TEA']['total_LCO'] * 1000 * G.nodes[n]['avg']['daily_supply_mwh'] +
+                  G.nodes[n]['energy_source_TEA']['total_daily_delay_cost'] for n in G]) /
+             avg_hybrid_battery_kwh['TOTAL'] + battery_LCO_kwh['TOTAL'] for c in comm_list])),
+        # amortized station capital cost (annual)
+        station_annual_cost=365 * sum([G.nodes[n]['energy_source_TEA']['station_LCO'] * 1000 *
+                                       G.nodes[n]['peak']['daily_supply_mwh'] for n in G]),
+        # amortized battery capital cost (annual)
+        battery_annual_cost={c: 365 * battery_LCO_tonmi * hybrid_tonmi[c] for c in comm_list},
+        # station capital cost
+        station_total=(sum([G.nodes[n]['energy_source_TEA']['station_total'] for n in G])),
+        # average station utilization over entire network
+        actual_utilization=(sum([G.nodes[n]['energy_source_TEA']['actual_utilization'] *
+                                 G.nodes[n]['energy_source_TEA']['daily_energy_kwh'] for n in G]) /
+                            avg_hybrid_battery_kwh['TOTAL']),
+        # total number of chargers installed
+        number_chargers=sum([G.nodes[n]['energy_source_TEA']['number_chargers'] for n in G]),
+        # average number of chargers per station
+        charger_per_station=round((sum([G.nodes[n]['energy_source_TEA']['number_chargers'] *
+                                        G.nodes[n]['energy_source_TEA']['daily_energy_kwh'] for n in G]) /
+                                   avg_hybrid_battery_kwh['TOTAL']), 1),
+        # daily energy consumption in kWh
+        daily_energy_kwh=sum([G.nodes[n]['energy_source_TEA']['daily_energy_kwh'] for n in G]),
+        # annual energy consumption in kWh
+        annual_energy_kwh=sum([G.nodes[n]['energy_source_TEA']['annual_energy_kwh'] for n in G]),
+        # charge time per locomotive [hrs]
+        charge_time=charge_time,
+        # average queue time per locomotive [hrs]
+        avg_queue_time_p_loc=(sum([G.nodes[n]['energy_source_TEA']['avg_queue_time_p_loc'] *
+                                   G.nodes[n]['avg']['number_loc'] for n in G if G.nodes[n]['facility']]) /
+                              avg_tot_loc),
+        # average queue length [# locomotives]
+        avg_queue_length=(sum([G.nodes[n]['energy_source_TEA']['avg_queue_length'] *
+                               G.nodes[n]['avg']['number_loc'] for n in G if G.nodes[n]['facility']]) / avg_tot_loc),
+        # average queue time per locomotive for peak locomotive throughput [hrs]
+        peak_queue_time_p_loc=(sum([G.nodes[n]['energy_source_TEA']['peak_queue_time_p_loc'] *
+                                    G.nodes[n]['peak']['number_loc'] for n in G if G.nodes[n]['facility']])
+                               / peak_tot_loc),
+        # average queue length for peak locomotive throughput [# locomotives]
+        peak_queue_length=(sum([G.nodes[n]['energy_source_TEA']['peak_queue_length'] *
+                                G.nodes[n]['peak']['number_loc'] for n in G if G.nodes[n]['facility']])
+                           / peak_tot_loc),
+        # average daily delay cost per car
+        avg_daily_delay_cost_p_car=(sum([G.nodes[n]['energy_source_TEA']['avg_daily_delay_cost_p_car'] *
+                                         G.nodes[n]['avg']['number_loc'] for n in G if G.nodes[n]['facility']]) /
+                                    avg_tot_loc),
+        # total daily delay cost
+        total_daily_delay_cost=sum([G.nodes[n]['energy_source_TEA']['total_daily_delay_cost'] for n in G]),
+        # total annual delay cost
+        total_annual_delay_cost=365 * sum([G.nodes[n]['energy_source_TEA']['total_daily_delay_cost'] for n in G])
+    )
+    # update dictionary with levelized cost calculations computed in terms of [$/ton-mile]
+    G.graph['energy_source_TEA'].update(dict(
+        # avg station_LCO per tonmi should be the total cost of the station (from peak value) over the battery tonmi
+        station_LCO_tonmi=dict(zip(
+            comm_list,
+            [G.graph['energy_source_TEA']['station_LCO_kwh'][c] * peak_hybrid_battery_kwh[c] / hybrid_tonmi[c]
+             for c in comm_list])),
+        # battery levelized cost per ton-mi
+        battery_LCO_tonmi={c: battery_LCO_tonmi for c in comm_list},
+        # O&M levelized cost per ton-mi
+        om_LCO_tonmi=dict(zip(
+            comm_list,
+            [G.graph['energy_source_TEA']['om_LCO_kwh'][c] * avg_hybrid_battery_kwh[c] / hybrid_tonmi[c]
+             for c in comm_list])),
+        # energy/electricity levelized cost per ton-mi
+        energy_LCO_tonmi=dict(zip(
+            comm_list,
+            [G.graph['energy_source_TEA']['energy_LCO_kwh'][c] * avg_hybrid_battery_kwh[c] / hybrid_tonmi[c]
+             for c in comm_list])),
+        # diesel fuel levelized cost per ton-mi
+        fuel_LCO_tonmi=dict(zip(
+            comm_list, [diesel_factor * avg_hybrid_diesel_gal[c] / hybrid_tonmi[c] for c in comm_list])),
+        # delay levelized cost per ton-mi
+        delay_LCO_tonmi=dict(zip(
+            comm_list,
+            [G.graph['energy_source_TEA']['delay_LCO_kwh'][c] * avg_hybrid_battery_kwh[c] / hybrid_tonmi[c]
+             for c in comm_list]))
+    ))
+
+    G.graph['energy_source_TEA'].update(dict(
+        # total levelized cost per ton-mi (only for battery costs)
+        total_LCO_tonmi={c: (G.graph['energy_source_TEA']['station_LCO_tonmi'][c] +
+                             G.graph['energy_source_TEA']['battery_LCO_tonmi'][c] +
+                             G.graph['energy_source_TEA']['om_LCO_tonmi'][c] +
+                             G.graph['energy_source_TEA']['energy_LCO_tonmi'][c] +
+                             G.graph['energy_source_TEA']['fuel_LCO_tonmi'][c] +
+                             G.graph['energy_source_TEA']['delay_LCO_tonmi'][c]) for c in comm_list},
+        # total levelized cost per ton-mi (for battery and support diesel operations costs)
+        total_scenario_LCO_tonmi={c: ((G.graph['energy_source_TEA']['station_LCO_tonmi'][c] +
+                                       G.graph['energy_source_TEA']['battery_LCO_tonmi'][c] +
+                                       G.graph['energy_source_TEA']['om_LCO_tonmi'][c] +
+                                       G.graph['energy_source_TEA']['energy_LCO_tonmi'][c] +
+                                       G.graph['energy_source_TEA']['fuel_LCO_tonmi'][c] +
+                                       G.graph['energy_source_TEA']['delay_LCO_tonmi'][c]) * hybrid_tonmi[c] +
+                                      diesel_factor * support_diesel_gal[c]) / baseline_total_tonmi[c]
+                                  for c in comm_list},
+        # total levelized cost (excluding delay costs) per ton-mi (only for battery costs)
+        total_nodelay_LCO_tonmi={c: (G.graph['energy_source_TEA']['station_LCO_tonmi'][c] +
+                                     G.graph['energy_source_TEA']['battery_LCO_tonmi'][c] +
+                                     G.graph['energy_source_TEA']['om_LCO_tonmi'][c] +
+                                     G.graph['energy_source_TEA']['energy_LCO_tonmi'][c] +
+                                     G.graph['energy_source_TEA']['fuel_LCO_tonmi'][c]) for c in comm_list},
+        # total levelized cost (excluding delay costs) per ton-mi (for battery and support diesel operations costs)
+        total_scenario_nodelay_LCO_tonmi={c: ((G.graph['energy_source_TEA']['station_LCO_tonmi'][c] +
+                                               G.graph['energy_source_TEA']['battery_LCO_tonmi'][c] +
+                                               G.graph['energy_source_TEA']['om_LCO_tonmi'][c] +
+                                               G.graph['energy_source_TEA']['energy_LCO_tonmi'][c] +
+                                               G.graph['energy_source_TEA']['fuel_LCO_tonmi'][c]) * hybrid_tonmi[c] +
+                                              diesel_factor * support_diesel_gal[c]) / baseline_total_tonmi[c]
+                                          for c in comm_list},
+        # annual cost related to battery operations
+        annual_battery_total_cost={c: 365 * (G.graph['energy_source_TEA']['station_LCO_tonmi'][c] +
+                                             G.graph['energy_source_TEA']['battery_LCO_tonmi'][c] +
+                                             G.graph['energy_source_TEA']['om_LCO_tonmi'][c] +
+                                             G.graph['energy_source_TEA']['energy_LCO_tonmi'][c]) * hybrid_tonmi[c]
+                                   for c in comm_list},
+        # annual cost associated with support diesel operations
+        annual_support_diesel_total_cost={c: 365 * diesel_factor * support_diesel_gal[c] for c in comm_list},
+        # annual total cost for complete scenario (includes respective batter and support diesel costs)
+        annual_total_cost={c: 365 * ((G.graph['energy_source_TEA']['station_LCO_tonmi'][c] +
+                                      G.graph['energy_source_TEA']['battery_LCO_tonmi'][c] +
+                                      G.graph['energy_source_TEA']['om_LCO_tonmi'][c] +
+                                      G.graph['energy_source_TEA']['energy_LCO_tonmi'][c] +
+                                      G.graph['energy_source_TEA']['fuel_LCO_tonmi'][c] +
+                                      G.graph['energy_source_TEA']['delay_LCO_tonmi'][c]) * hybrid_tonmi[c] +
+                                     diesel_factor * support_diesel_gal[c]) for c in comm_list}
+    ))
+
+    return G
+
+
 '''
 HYDROGEN
 '''
@@ -567,7 +901,7 @@ def tea_hydrogen(peak_loc: float, avg_loc: float, avg_kgh2: float, max_util: flo
 
 
 def tea_hydrogen_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_type: str = 'Cryo-pump',
-                                clean_energy_cost: float = None):
+                                clean_energy_cost: float = None, diesel_cost_p_gal: float = None):
     # lookup dataframes for constants
     rr_v = load_railroad_values().loc[G.graph['scenario']['railroad']]
     # calculate average # batteries per locomotive based on range and effective battery energy capacity
@@ -582,6 +916,8 @@ def tea_hydrogen_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_t
 
     car_dol_hr = 8.42  # [$/hr] delay cost per car-hr
     car_dol_hr_im = 26.95   # [$/hr] delay cost per car-hr for intermodal
+    # car_dol_hr = 0  # [$/hr] delay cost per car-hr
+    # car_dol_hr_im = 0   # [$/hr] delay cost per car-hr for intermodal
     # delay_tonmi for IM
     im_share_tonmi = hydrogen_tonmi['IM'] / hydrogen_tonmi['TOTAL'] if hydrogen_tonmi['TOTAL'] != 0 else 0
 
@@ -663,9 +999,12 @@ def tea_hydrogen_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_t
     tender_LCO_kgh2 = {c: tender_LCO_tonmi * hydrogen_tonmi[c] / avg_hydrogen_energy_kgh2[c]
     if avg_hydrogen_energy_kgh2[c] > 0 else 0 for c in comm_list}
 
-    # load dataframe for cost factors: index is fuel_type, column is value in [$/gal]
-    df_dropin = load_tea_dropin_lookup()
-    diesel_factor = df_dropin.loc['diesel', '$/gal']
+    if diesel_cost_p_gal is None:
+        # load dataframe for cost factors of diesel: index is fuel_type, column is value in [$/gal]
+        df_dropin = load_tea_dropin_lookup()
+        diesel_factor = df_dropin.loc['diesel', '$/gal']
+    else:
+        diesel_factor = diesel_cost_p_gal
 
     G.graph['energy_source_TEA'] = dict(
         # avg station_LCO per kWh should be the total cost of the station (from peak value) over the avg usage
@@ -840,16 +1179,26 @@ def load_tea_dropin_lookup():
                        header=0, index_col='fuel_type')
 
 
-def tea_dropin(G: nx.DiGraph, fuel_type: str, deployment_perc: float, scenario_fuel_type: str = None):
+def tea_dropin(G: nx.DiGraph, fuel_type: str, deployment_perc: float, scenario_fuel_type: str = None,
+               diesel_cost_p_gal: float = None):
     # return G with edge attribute with emissions info for <fuel_type> at <deployment_perc> w/ diesel as the baseline
     # load dataframe for cost factors: index is fuel_type, column is value in [$/gal]
 
     if scenario_fuel_type is None:
         scenario_fuel_type = fuel_type
 
-    df_cost = load_tea_dropin_lookup()
-    c_factor = df_cost.loc[fuel_type, '$/gal']
-    c_diesel = df_cost.loc['diesel', '$/gal']
+    if diesel_cost_p_gal is None:
+        df_cost = load_tea_dropin_lookup()
+        c_factor = df_cost.loc[fuel_type, '$/gal']
+        c_diesel = df_cost.loc['diesel', '$/gal']
+    else:
+        c_diesel = diesel_cost_p_gal
+        if fuel_type == 'diesel':
+            c_factor = diesel_cost_p_gal
+        else:
+            df_cost = load_tea_dropin_lookup()
+            c_factor = df_cost.loc[fuel_type, '$/gal']
+
     weighted_c_factor = c_factor * deployment_perc + c_diesel * (1 - deployment_perc)
 
     if fuel_type != scenario_fuel_type:

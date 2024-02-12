@@ -49,10 +49,10 @@ else:
 range_list = [200, 400, 800, 1000, 1500]
 range_list_value = 400
 RR_range_selected = range_list_value
-ES_list = ['diesel', 'biodiesel', 'e-fuel', "battery", "hydrogen"]
+ES_list = ['diesel', 'biodiesel', 'e-fuel', "battery", "hydrogen", 'hybrid2:1', 'hybrid1:1']
 ES_list_value = 'battery'
 ES_name_selected = ES_list_value
-ES_list_show = ['Diesel', 'Biofuel', 'e-fuel', "Battery-electric", "Hydrogen"]
+ES_list_show = ['Diesel', 'Biofuel', 'e-fuel', "Battery-electric", "Hydrogen", 'Hybrid 2:1', 'Hybrid 1:1']
 # db_list = ['General', 'Comparison', 'Parameters']
 db_list = ['General', 'Parameters']
 db_list_value = 'General'
@@ -85,6 +85,8 @@ battery_capa_value = 10
 battery_capa_list_value = battery_capa_value
 battery_PPA_switch_value: bool = False
 battery_ppa_cost_box_value = 0
+battery_cost_p_tonmi_box_value = None
+diesel_cost_p_gal_box_value = None
 year_list = [2035]
 year_value = 2035
 year_list_value = year_value
@@ -204,19 +206,48 @@ range_slider = html.Div(
     className="mb-3",
 )
 
+# Slider for facility distance selection for hybrid
+facility_dist_slider = html.Div(
+    [
+        dbc.Collapse(
+            dbc.Row([
+                dbc.Label("Inter-facility Distance (mi)", html_for="slider"),
+                dcc.Slider(0, 1500,
+                           step=None,
+                           marks={
+                               x: str(x) for x in range_list
+                           },
+                           value=range_list_value,
+                           id="facility_dist_slider",
+                           persistence=True, persistence_type="memory",
+                           )
+            ]),
+            id="facility_dist_collapse",
+            is_open=True,
+        )
+    ],
+    className="mb-3",
+)
+
 # Slider for deployment % selection
 deploy_pct_slider = html.Div(
     [
-        dbc.Label("Target Deployment % (Overall)", html_for="slider"),
-        dcc.Slider(0, 1,
-                   step=None,
-                   marks={
-                       x: str(int(x * 100)) + '%' for x in deploy_pct_list
-                   },
-                   value=deploy_pct_value,
-                   id="deploy_pct_slider",
-                   persistence=True, persistence_type="memory",
-                   )
+        dbc.Collapse(
+            dbc.Row([
+                dbc.Label("Target Deployment % (Overall)", html_for="slider"),
+                dcc.Slider(0, 1,
+                           step=None,
+                           marks={
+                               x: str(int(x * 100)) + '%' for x in deploy_pct_list
+                           },
+                           value=deploy_pct_value,
+                           id="deploy_pct_slider",
+                           persistence=True, persistence_type="memory",
+                           )
+            ]),
+            id='deploy_pct_collapse',
+            is_open=True,
+        )
     ],
     className="mb-3",
 )
@@ -480,16 +511,30 @@ def return_station_type(ES_name):
 def return_RR_range_map(RR_name, ES_name, comm_name, RR_range, deploy_pct, load_scenario=True, cache_scenario=True,
                         plot=True, legend_show=True, station_type=None,
                         clean_energy=False, clean_energy_cost=0, h2_fuel_type=None,
-                        reroute=re_routing_switch_value, switch_tech=loco_switching_switch_value, ):
+                        reroute=re_routing_switch_value, switch_tech=loco_switching_switch_value,
+                        tender_cost_p_tonmi=battery_cost_p_tonmi_box_value,
+                        diesel_cost_p_gal=diesel_cost_p_gal_box_value):
     # TODO: <load_plot> currently useless, must decide whether se want this or not
     # <load_plot> = True - load the fig from the cached file if it exists, = False - rerun scenario and cache plot file
-    _, fig, label = run_scenario(rr=RR_name, fuel_type=ES_name, comm_group=comm_name, D=RR_range * 1.6,
-                                 deployment_perc=deploy_pct, cache_scenario=cache_scenario,
-                                 reroute=reroute, switch_tech=switch_tech,
-                                 clean_energy=clean_energy, clean_energy_cost=clean_energy_cost,
-                                 h2_fuel_type=h2_fuel_type,
-                                 plot=plot, load_scenario=load_scenario, legend_show=legend_show,
-                                 station_type=station_type)
+    if 'hybrid' in ES_name:
+        _, fig, label = run_scenario(rr=RR_name, fuel_type=ES_name, comm_group=comm_name, D=RR_range * 1.6,
+                                     deployment_perc=deploy_pct, perc_ods=1.0, cache_scenario=False,
+                                     deployment_table=True,
+                                     reroute=reroute, switch_tech=switch_tech,
+                                     clean_energy=clean_energy, clean_energy_cost=clean_energy_cost,
+                                     h2_fuel_type=h2_fuel_type, tender_cost_p_tonmi=tender_cost_p_tonmi,
+                                     diesel_cost_p_gal=diesel_cost_p_gal,
+                                     plot=plot, load_scenario=False, legend_show=legend_show,
+                                     station_type=station_type)
+    else:
+        _, fig, label = run_scenario(rr=RR_name, fuel_type=ES_name, comm_group=comm_name, D=RR_range * 1.6,
+                                     deployment_perc=deploy_pct, cache_scenario=cache_scenario,
+                                     reroute=reroute, switch_tech=switch_tech,
+                                     clean_energy=clean_energy, clean_energy_cost=clean_energy_cost,
+                                     h2_fuel_type=h2_fuel_type, tender_cost_p_tonmi=tender_cost_p_tonmi,
+                                     diesel_cost_p_gal=diesel_cost_p_gal,
+                                     plot=plot, load_scenario=load_scenario, legend_show=legend_show,
+                                     station_type=station_type)
 
     return fig, label
 
@@ -497,24 +542,38 @@ def return_RR_range_map(RR_name, ES_name, comm_name, RR_range, deploy_pct, load_
 # Read parameter changes
 @app.callback(
     [Output("battery_range_collapse", "is_open"),
+     Output("facility_dist_collapse", "is_open"),
+     Output("deploy_pct_collapse", "is_open"),
      ],
     [Input("RR_dropdown", "value"),
      Input("ES_dropdown", "value"),
      Input("comm_dropdown", "value"),
      Input("range_slider", "value"),
+     Input("facility_dist_slider", "value"),
      Input("deploy_pct_slider", "value"),
      Input("legend_switch", "value"),
      ]
 )
-def read_parameter(RR_name, ES_name, comm_name, RR_range, deploy_pct, legend_show):
+def read_parameter(RR_name, ES_name, comm_name, RR_range, fac_dist, deploy_pct, legend_show):
     global RR_name_selected, ES_name_selected, comm_name_selected, RR_range_selected, deploy_pct_selected, legend_switch_selected
-    RR_name_selected, ES_name_selected, comm_name_selected, RR_range_selected, deploy_pct_selected, legend_switch_selected = RR_name, ES_name, comm_name, RR_range, deploy_pct, legend_show
+    if 'hybrid' in ES_name:
+        RR_name_selected, ES_name_selected, comm_name_selected, RR_range_selected, deploy_pct_selected, legend_switch_selected = RR_name, ES_name, comm_name, fac_dist, deploy_pct, legend_show
+    else:
+        RR_name_selected, ES_name_selected, comm_name_selected, RR_range_selected, deploy_pct_selected, legend_switch_selected = RR_name, ES_name, comm_name, RR_range, deploy_pct, legend_show
     # Expand/Collapse battery range slider depending on ES
     if ES_name == 'battery':
         battery_range_collapse_open = True
+        facility_dist_collapse_open = False
+        deploy_pct_collapse_open = True
+    elif 'hybrid' in ES_name:
+        battery_range_collapse_open = False
+        facility_dist_collapse_open = True
+        deploy_pct_collapse_open = False
     else:
         battery_range_collapse_open = False
-    return [battery_range_collapse_open]
+        facility_dist_collapse_open = False
+        deploy_pct_collapse_open = True
+    return [battery_range_collapse_open, facility_dist_collapse_open, deploy_pct_collapse_open]
 
 
 # Load / reload a scenario
@@ -566,7 +625,9 @@ def display_RR_range_map(n_run, n_rerun):
                                                   clean_energy=clean_energy,
                                                   clean_energy_cost=battery_ppa_cost_box_value,
                                                   station_type=station_type, reroute=re_routing_switch_value,
-                                                  switch_tech=loco_switching_switch_value)
+                                                  switch_tech=loco_switching_switch_value,
+                                                  tender_cost_p_tonmi=battery_cost_p_tonmi_box_value,
+                                                  diesel_cost_p_gal=diesel_cost_p_gal_box_value)
         elif ES_name == 'hydrogen':
             clean_energy = hydrogen_fuel_list_value != "Natural Gas"
             fig_list, label = return_RR_range_map(RR_name, ES_name, comm_name, 0, deploy_pct,
@@ -575,7 +636,19 @@ def display_RR_range_map(n_run, n_rerun):
                                                   clean_energy_cost=hydrogen_PPA_cost_box_value,
                                                   h2_fuel_type=hydrogen_fuel_list_value,
                                                   station_type=station_type, reroute=re_routing_switch_value,
-                                                  switch_tech=loco_switching_switch_value)
+                                                  switch_tech=loco_switching_switch_value,
+                                                  diesel_cost_p_gal=diesel_cost_p_gal_box_value)
+        # TODO: add in hybrid here
+        elif 'hybrid' in ES_name:
+            clean_energy = battery_PPA_switch_value
+            fig_list, label = return_RR_range_map(RR_name, ES_name, comm_name, RR_range, deploy_pct,
+                                                  load_scenario=load_scenario, legend_show=legend_show,
+                                                  clean_energy=clean_energy,
+                                                  clean_energy_cost=battery_ppa_cost_box_value,
+                                                  station_type=station_type, reroute=re_routing_switch_value,
+                                                  switch_tech=loco_switching_switch_value,
+                                                  tender_cost_p_tonmi=battery_cost_p_tonmi_box_value,
+                                                  diesel_cost_p_gal=diesel_cost_p_gal_box_value)
         elif ES_name == 'diesel':
             fig_list, label = return_RR_range_map(RR_name, ES_name, comm_name, 0, 1, load_scenario=load_scenario,
                                                   legend_show=legend_show)
@@ -707,6 +780,8 @@ general_dashboard = [
                  dbc.Row(ES_dropdown),
                  dbc.Row(style={"height": "1vh"}),
                  dbc.Row(range_slider),
+                 dbc.Row(style={"height": "1vh"}),
+                 dbc.Row(facility_dist_slider),
                  dbc.Row(style={"height": "1vh"}),
                  dbc.Row(deploy_pct_slider),
                  dbc.Row(style={"height": "1vh"}),
@@ -868,6 +943,19 @@ discount_rate_slider = html.Div(
     className="mb-3",
 )
 
+# Diesel cost per gallon box
+diesel_cost_p_gal_box = html.Div(
+    [
+        dbc.Label("Diesel Cost ($/gal)"),
+        dbc.Input(
+            value=diesel_cost_p_gal_box_value,
+            id="diesel_cost_p_gal_box",
+            type="number",
+            persistence=True, persistence_type="memory",
+        ),
+    ]
+)
+
 # Slider for charger speed
 charger_speed_slider = html.Div(
     [
@@ -917,6 +1005,19 @@ battery_capa_slider = html.Div(
                    )
     ],
     className="mb-3",
+)
+
+# Battery cost per ton-mile box
+battery_cost_p_tonmi_box = html.Div(
+    [
+        dbc.Label("Battery Energy Storage Cost ($/ton-mile)"),
+        dbc.Input(
+            value=battery_cost_p_tonmi_box_value,
+            id="battery_cost_p_tonmi_box",
+            type="number",
+            persistence=True, persistence_type="memory",
+        ),
+    ]
 )
 
 # Battery clean energy premium
@@ -1038,14 +1139,16 @@ para_dashboard = [
     dbc.Row(html.Strong("General")),
     dbc.Row([dbc.Col(year_slider, width=4),
              dbc.Col(discount_rate_slider, width=4),
+             dbc.Col(diesel_cost_p_gal_box, width=2),
              ]),
     dbc.Row(style={"height": "1vh"}),
     dbc.Row(html.Strong("Battery")),
-    dbc.Row([dbc.Col(charger_speed_slider, width=3),
-             dbc.Col(charger_no_hour_slider, width=3),
+    dbc.Row([dbc.Col(charger_speed_slider, width=2),
+             dbc.Col(charger_no_hour_slider, width=2),
              dbc.Col(battery_capa_slider, width=2),
              dbc.Col(battery_PPA_switch, width=2),
              dbc.Col(battery_PPA_box, width=2),
+             dbc.Col(battery_cost_p_tonmi_box, width=2),
              ]),
     dbc.Row(style={"height": "1vh"}),
     dbc.Row(html.Strong("Hydrogen")),
@@ -1069,9 +1172,11 @@ para_dashboard = [
     Output("dummy_output", 'children'),
     [Input("year_slider", "value"),
      Input("discount_rate_slider", "value"),
+     Input("diesel_cost_p_gal_box", "value"),
      Input("charger_speed_slider", "value"),
      Input("charger_no_hour_slider", "value"),
      Input("battery_capa_slider", "value"),
+     Input("battery_cost_p_tonmi_box", "value"),
      Input("battery_PPA_switch", "value"),
      Input("battery_PPA_box", "value"),
      Input("hydrogen_no_hour_slider", "value"),
@@ -1082,21 +1187,25 @@ para_dashboard = [
      Input("loco_switching_switch", "value"),
      ],
 )
-def set_param(year_value, discount_rate_value, charger_speed_value, charger_no_hour_value,
+def set_param(year_value, discount_rate_value, battery_cost_p_tonmi_value, diesel_cost_p_gal_value,
+              charger_speed_value, charger_no_hour_value,
               battery_capa_value, battery_PPA_switch, battery_PPA_value, hydrogen_no_hour_value,
               hydrogen_dispense_value,
               hydrogen_PPA_cost_value, hydrogen_fuel_value,
               re_routing_value, loco_switching_value):
-    global year_list_value, discount_rate_list_value, charger_speed_list_value, charger_no_hour_list_value, \
+    global year_list_value, discount_rate_list_value, battery_cost_p_tonmi_box_value, diesel_cost_p_gal_box_value, \
+        charger_speed_list_value, charger_no_hour_list_value, \
         battery_capa_list_value, battery_PPA_switch_value, battery_ppa_cost_box_value, hydrogen_no_hour_list_value, hydrogen_dispense_list_value, \
         hydrogen_PPA_cost_box_value, hydrogen_fuel_list_value, \
         re_routing_switch_value, loco_switching_switch_value
 
-    year_list_value, discount_rate_list_value, charger_speed_list_value, charger_no_hour_list_value, \
+    year_list_value, discount_rate_list_value, battery_cost_p_tonmi_box_value, diesel_cost_p_gal_box_value, \
+    charger_speed_list_value, charger_no_hour_list_value, \
     battery_capa_list_value, battery_PPA_switch_value, battery_ppa_cost_box_value, hydrogen_no_hour_list_value, hydrogen_dispense_list_value, \
     hydrogen_PPA_cost_box_value, hydrogen_fuel_list_value, \
     re_routing_switch_value, loco_switching_switch_value = \
-        year_value, discount_rate_value, charger_speed_value, charger_no_hour_value, \
+        year_value, discount_rate_value, battery_cost_p_tonmi_value, diesel_cost_p_gal_value,\
+        charger_speed_value, charger_no_hour_value, \
         battery_capa_value, battery_PPA_switch, battery_PPA_value, hydrogen_no_hour_value, hydrogen_dispense_value, \
         hydrogen_PPA_cost_value, hydrogen_fuel_value, \
         re_routing_value, loco_switching_value

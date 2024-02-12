@@ -1,3 +1,8 @@
+import os
+
+import networkx as nx
+import pandas as pd
+
 from util import *
 
 
@@ -6,15 +11,31 @@ GENERAL
 '''
 
 
-def extract_rr(df: pd.DataFrame, rr: str):
+def extract_rr(df: pd.DataFrame, rr: str, forecast=False):
     # extract rows with data for rr from df
 
-    agg_fxn = {'Expanded Number of Samples': np.sum, 'Expanded Tons': np.sum, 'Expanded Carloads': np.sum,
-               'Expanded Trailer/Container Count': np.sum, 'Expanded Ton-Miles': np.sum,
-               'Expanded Car-Miles': np.sum,
-               'Expanded Container-Miles': np.sum, 'Total Distance Mean': np.mean,
-               'Total Distance Standard Deviation': np.std, 'Total Distance Max': np.max,
-               'Total Distance Min': np.min}
+    if forecast:
+        agg_fxn = {'Expanded Number of Samples': np.sum, 'Expanded Tons': np.sum, 'Expanded Carloads': np.sum,
+                   'Expanded Trailer/Container Count': np.sum, 'Expanded Ton-Miles': np.sum,
+                   'Expanded Car-Miles': np.sum,
+                   'Expanded Container-Miles': np.sum, 'Total Distance Mean': np.mean,
+                   'Total Distance Standard Deviation': np.std, 'Total Distance Max': np.max,
+                   'Total Distance Min': np.min,
+                   '2020 Expanded Tons': np.sum, '2020 Expanded Ton-Miles': np.sum,
+                   '2023 Expanded Tons': np.sum, '2023 Expanded Ton-Miles': np.sum,
+                   '2025 Expanded Tons': np.sum, '2025 Expanded Ton-Miles': np.sum,
+                   '2030 Expanded Tons': np.sum, '2030 Expanded Ton-Miles': np.sum,
+                   '2035 Expanded Tons': np.sum, '2035 Expanded Ton-Miles': np.sum,
+                   '2040 Expanded Tons': np.sum, '2040 Expanded Ton-Miles': np.sum,
+                   '2045 Expanded Tons': np.sum, '2045 Expanded Ton-Miles': np.sum,
+                   '2050 Expanded Tons': np.sum, '2050 Expanded Ton-Miles': np.sum}
+    else:
+        agg_fxn = {'Expanded Number of Samples': np.sum, 'Expanded Tons': np.sum, 'Expanded Carloads': np.sum,
+                   'Expanded Trailer/Container Count': np.sum, 'Expanded Ton-Miles': np.sum,
+                   'Expanded Car-Miles': np.sum,
+                   'Expanded Container-Miles': np.sum, 'Total Distance Mean': np.mean,
+                   'Total Distance Standard Deviation': np.std, 'Total Distance Max': np.max,
+                   'Total Distance Min': np.min}
     # # apply aggregation function
     # return df_class1.agg(agg_fxn)
 
@@ -52,11 +73,37 @@ def load_lca_battery_lookup():
     # NUFRIEND
     filename = 'lca_battery_state_2036_g_kwh.csv'
     # SF Paper
-    print('SF')
-    filename = 'lca_egrid_battery_state_2020_g_kwh.csv'
+    # print('SF')
+    # filename = 'lca_egrid_battery_state_2020_g_kwh.csv'
     # filename = 'lca_egrid_battery_state_2030_g_kwh.csv'
 
     return pd.read_csv(os.path.join(LCA_DIR, filename), header=0, index_col='state')
+
+
+def load_lca_battery_lookup_mp(year: str):
+    # return dataframe for emissions factors: index is state abbrev., value is associated [g CO2/kWh] - 2036 projections
+    # NUFRIEND
+    filename = 'lca_battery_state_2018_2050_g_kwh.csv'
+    # SF Paper
+    # print('SF')
+    # filename = 'lca_egrid_battery_state_2020_g_kwh.csv'
+    # filename = 'lca_egrid_battery_state_2030_g_kwh.csv'
+
+    df = pd.read_csv(os.path.join(LCA_DIR, filename), header=0, index_col='year')
+
+    year = int(year)
+    # pick min
+    if year < min(df.index):
+        year = min(df.index)
+    elif year > max(df.index):
+        year = max(df.index)
+    # interpolate
+    if year not in df.index:
+        year_bef = year - 1
+        year_aft = year + 1
+        return df.loc[[year_bef, year_aft]].groupby(by=['state']).mean()
+    else:
+        return df.loc[year].groupby(by=['state']).first()
 
 
 def load_lca_hydrogen_lookup():
@@ -68,6 +115,23 @@ def load_lca_hydrogen_lookup():
 
 def load_tea_battery_lookup():
     return pd.read_csv(os.path.join(TEA_DIR, 'tea_battery_lookup_table_dollar_kwh.csv'), header=0)
+
+
+def load_tea_battery_lookup_mp(year: str):
+
+    filename = 'average_commercial_electricity_price_state_year.csv'
+
+    df = pd.read_csv(os.path.join(TEA_DIR, filename), header=0, index_col='state')
+
+    year = int(year)
+    years_int = [int(y) for y in df.columns]
+    # pick min
+    if year < min(years_int):
+        year = min(years_int)
+    elif year > max(years_int):
+        year = max(years_int)
+
+    return df[str(year)]
 
 
 def load_tea_hydrogen_lookup():
@@ -96,7 +160,7 @@ def load_railroad_loc_car_train():
 
 
 def load_railroad_comm_ton_car():
-    return pd.read_csv(os.path.join(CCWS_DIR, 'WB2019_tons_per_car_rr_comm.csv'), header=0, index_col='Railroad')
+    return pd.read_csv(os.path.join(FLOW_DIR, 'WB2019_tons_per_car_rr_comm.csv'), header=0, index_col='Railroad')
 
 
 def load_conversion_factors():
@@ -114,6 +178,19 @@ def load_conversion_factors():
 
 def load_fuel_tech_eff_factor():
     return pd.read_csv(os.path.join(GEN_DIR, 'fuel_tech_efficiency_factor.csv'), header=0, index_col='Fuel technology')
+
+
+def load_diesel_prices_mp():
+    return pd.read_csv(os.path.join(TEA_DIR, 'diesel_prices_year_dol_gal.csv'), header=0, index_col='year')
+
+
+def load_efuel_prices_mp():
+    return pd.read_csv(os.path.join(TEA_DIR, 'efuel_prices_year_dol_gal.csv'), header=0, index_col='year')
+
+
+def load_hybrid_energy_intensity_values():
+    # in btu/ton-mi
+    return pd.read_csv(os.path.join(GEN_DIR, 'hybrid_energy_intensity_values.csv'), header=0, index_col='alignment')
 
 
 '''
@@ -259,7 +336,55 @@ def shortest_path(G: nx.Graph, source: int, target: int, weight='km', inter_node
     return node_path
 
 
+def k_shortest_paths(G: nx.Graph, source: int, target: int,  k: int, weight='km'):
+
+    return list(islice(nx.shortest_simple_paths(G, source, target, weight=weight), k))
+
+
+def k_shortest_paths_edges(G: nx.Graph, source: int, target: int,  k: int, weight='km'):
+
+    return [node_to_edge_path(p) for p in k_shortest_paths(G=G, source=source, target=target,  k=k, weight=weight)]
+
+
+def shortest_path_path_length(G: nx.Graph, source: int, target: int, weight='km', inter_nodes=None) -> (list, float):
+    """
+    Return shortest path path and length in G between source and target that passes through inter_nodes in order listed
+    :param inter_nodes:
+    :param G:
+    :param source:
+    :param target:
+    :param weight:
+    :param inter_nodes:
+    :return:
+
+    Cicero: 17031000719, LA: 6037003164
+    [Galesburg, Burlington, Barstow]: [17095001986, 19057001911, 6071002447]
+    s = 17031000719
+    e = 6037003164
+    t = [17095001986, 19057001911, 6071002447]
+    """
+
+    if inter_nodes is None:
+        inter_nodes = []
+    # update nodeids to the correct super nodeids in G, if they are grouped as such
+    inter_nodes = [update_node(G, n) for n in inter_nodes]
+
+    s = update_node(G, source)
+    node_path = [s]
+    for v in inter_nodes:
+        node_path.extend(nx.shortest_path(G, source=s, target=v, weight=weight)[1:])
+        s = v
+
+    node_path.extend(nx.shortest_path(G, source=s, target=update_node(G, target), weight=weight)[1:])
+
+    dist_mi = 0
+    for (u, v) in zip(node_path[0:-1], node_path[1:]):
+        dist_mi += G.edges[u, v][weight]
+
+    return node_path, dist_mi
+
 # GRAPH MANAGEMENT
+
 
 def update_node(G: nx.Graph, node):
     # return updated node name that contains the node <node> in G
@@ -291,6 +416,28 @@ def splc_to_node(G: nx.Graph) -> dict:
             splc_node_dict[s] = n
 
     return splc_node_dict
+
+
+def regional_alignments(G: nx.DiGraph):
+    # add in information on regional alignments as in A-STEP train simulation tool to nodes and edges of G
+    region_filepath = os.path.join(GEN_DIR, 'hybrid_alignments.csv')
+    df_reg_lgnd = pd.read_csv(region_filepath, header=0, index_col='state')
+    for n in G:
+        G.nodes[n]['region_alignment'] = 'a' + str(df_reg_lgnd.loc[G.nodes[n]['state']].values[0])
+
+    for e in G.edges:
+        u, v = e
+        u_algn = G.nodes[u]['region_alignment']
+        v_algn = G.nodes[v]['region_alignment']
+        if u_algn == v_algn:
+            G.edges[e]['region_alignment'] = u_algn
+        # to preserve the right order for searching up later
+        elif int(u_algn[1]) < int(v_algn[1]):
+            G.edges[e]['region_alignment'] = u_algn + v_algn
+        else:
+            G.edges[e]['region_alignment'] = v_algn + u_algn
+
+    return G
 
 
 '''
@@ -353,8 +500,8 @@ def elec_rate_state(G: nx.DiGraph, emissions=False, clean_elec_prem_dolkwh: floa
     # NUFRIEND
     filename = 'average_electricity_price_state.csv'
     # SF Paper
-    print('SF')
-    filename = 'eia_average_electricity_price_state_2020.csv'
+    # print('SF')
+    # filename = 'eia_average_electricity_price_state_2020.csv'
 
     if clean_elec_prem_dolkwh is None:
         clean_elec_prem_dolkwh = 0
@@ -377,8 +524,25 @@ def elec_rate_state(G: nx.DiGraph, emissions=False, clean_elec_prem_dolkwh: floa
     return elec_rate_dict
 
 
+def elec_rate_state_mp(G: nx.DiGraph, year: str):
+    # return electricity rate for each node based on state rate in [$/MWh] or in [gC02/kWh] if <emissions>=True
+    # NUFRIEND
+    # SF Paper
+    # print('SF')
+    # filename = 'eia_average_electricity_price_state_2020.csv'
+
+    # return price by state for <year>
+    df_state = load_tea_battery_lookup_mp(year=year)
+    elec_rate_dict = dict()
+    for n in G:
+        # add in clean electricity premium
+        elec_rate_dict[n] = 10 * df_state.loc[G.nodes[n]['state']]  # 10 * ¢/kWh == $/MWh
+
+    return elec_rate_dict
+
+
 '''
-waybill_data_processing.py
+flow_data_processing.py
 '''
 
 

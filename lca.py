@@ -107,6 +107,112 @@ def lca_battery(G: nx.DiGraph, clean_energy=False):
     return G
 
 
+def lca_hybrid(G: nx.DiGraph, clean_energy=False):
+    """
+    Conducts emissions life-cycle analysis for all charging facilities in G based on their size, consumption,
+    and location.
+
+    Parameters
+    ----------
+    G : nx.DiGraph
+        The networkx graph to add the emissions information to.
+    clean_energy : bool, optional
+        True if considering clean energy, False o.w.
+
+    Returns
+    -------
+    nx.DiGraph
+        Updated version of G, which includes all the relevant life-cycle analysis calculations.
+
+    """
+
+    # load dataframe for cost factors: index is fuel_type, column is railroad, value is in [g CO2/kWh]
+    df_e = load_lca_battery_lookup().div(1e6)  # in [ton CO2/kWh]
+
+    fuel_type = G.graph['scenario']['fuel_type']
+    fuel_type_battery = fuel_type + '_battery'
+    fuel_type_diesel = fuel_type + '_diesel'
+
+    for n in G:
+        if clean_energy:
+            e_factor = 0
+        else:
+            e_factor = df_e.loc[G.nodes[n]['state'], 'emissions']
+        G.nodes[n]['energy_source_LCA'] = {'emissions_tonco2_kwh': e_factor,
+                                           'daily_emissions_tonco2':
+                                               (1000 * e_factor * G.nodes[n]['avg']['daily_supply_mwh']),
+                                           'annual_total_emissions_tonco2':
+                                               (365 * 1000 * e_factor * G.nodes[n]['avg']['daily_supply_mwh'])}
+
+    df_dropin = load_lca_dropin_lookup()
+    diesel_factor = df_dropin.loc['diesel', 'gCO2/gal'] / 1e6  # in [ton-CO2/gal]
+    # comm_list = ['AG_FOOD', 'CHEM_PET', 'COAL', 'FOR_PROD', 'IM', 'MET_ORE', 'MO_VEH', 'NONMET_PRO', 'OTHER']
+    # comm_er = load_comm_energy_ratios()['Weighted ratio'][comm_list].to_numpy()  # commodity energy ratios
+    # comm_tonmi_dict = {c: sum([G.edges[u, v]['baseline_avg_ton'][c] * G.edges[u, v]['miles'] for u, v in G.edges])
+    #                    for c in comm_list}
+    # total_tonmi = sum(comm_tonmi_dict.values())
+    # comm_diesel_factor = diesel_factor * sum([comm_er[i] * comm_tonmi_dict[comm_list[i]] / total_tonmi
+    #                                           for i in range(len(comm_list))])
+
+    comm_list = list({c for u, v in G.edges for c in G.edges[u, v][fuel_type_battery + '_avg_kwh'].keys()})
+
+    # battery_annual_energy_kwh = G.graph['MCNF_avg']['total_energy_mwh'] * 1000 * 365
+    hybrid_battery_annual_kwh = {c: 365 * sum(G.edges[u, v][fuel_type_battery + '_avg_kwh'][c] for u, v in G.edges)
+                                 for c in comm_list}
+    hybrid_diesel_annual_gal = {c: 365 * sum(G.edges[u, v][fuel_type_diesel + '_avg_gal'][c] for u, v in G.edges)
+                                for c in comm_list}
+    # annual_new_total_ton_mi = G.graph['operations']['annual_new_total_ton_mi']
+    # support_diesel_annual_tonmi = G.graph['operations']['annual_support_diesel_total_ton_mi']
+    # battery_actual_annual_tonmi = annual_new_total_ton_mi - support_diesel_annual_tonmi
+    # use the percentage of ton-mi increase to calculate all in terms of baseline ton-miles
+    tonmi_deflation_factor = {c: 1 - G.graph['operations']['perc_tonmi_inc'][c] / 100 for c in comm_list}
+    hybrid_annual_tonmi = {c: 365 * sum([G.edges[u, v][fuel_type + '_avg_ton'][c] * G.edges[u, v]['miles']
+                                         for u, v in G.edges]) * tonmi_deflation_factor[c] for c in comm_list}
+    support_diesel_annual_tonmi = {c: 365 * sum([G.edges[u, v]['support_diesel_avg_ton'][c] * G.edges[u, v]['miles']
+                                                 for u, v in G.edges]) * tonmi_deflation_factor[c] for c in comm_list}
+    baseline_annual_tonmi = {c: hybrid_annual_tonmi[c] + support_diesel_annual_tonmi[c] for c in comm_list}
+    support_diesel_annual_gal = {c: 365 * sum([G.edges[u, v]['support_diesel_avg_gal'][c] for u, v in G.edges])
+                                 for c in comm_list}
+    annual_hybrid_battery_total_emissions = {c: (sum([G.nodes[n]['energy_source_LCA']['annual_total_emissions_tonco2']
+                                                      for n in G]) * hybrid_battery_annual_kwh[c] /
+                                                 hybrid_battery_annual_kwh['TOTAL']) for c in comm_list}
+
+    hybrid_battery_avg_emissions_tonco2_kwh = (annual_hybrid_battery_total_emissions['TOTAL'] /
+                                               hybrid_battery_annual_kwh['TOTAL'])
+    annual_hybrid_diesel_total_emissions = {c: diesel_factor * hybrid_diesel_annual_gal[c] for c in comm_list}
+    annual_hybrid_total_emissions = {c: (annual_hybrid_battery_total_emissions[c] +
+                                         annual_hybrid_diesel_total_emissions[c]) for c in comm_list}
+
+    hybrid_avg_emissions_tonco2_tonmi = {c: (annual_hybrid_total_emissions[c] /
+                                             hybrid_annual_tonmi[c]) for c in comm_list}
+
+    G.graph['energy_source_LCA'] = dict(
+        annual_hybrid_battery_total_emissions=annual_hybrid_battery_total_emissions,
+        annual_hybrid_diesel_total_emissions=annual_hybrid_diesel_total_emissions,
+        annual_hybrid_total_emissions=annual_hybrid_total_emissions,
+        annual_support_diesel_total_emissions=dict(zip(
+            comm_list,
+            [diesel_factor * support_diesel_annual_gal[c] for c in comm_list])),
+        hybrid_battery_emissions_tonco2_kwh={c: hybrid_battery_avg_emissions_tonco2_kwh for c in comm_list},
+        hybrid_emissions_tonco2_tonmi=dict(zip(
+            comm_list, [hybrid_avg_emissions_tonco2_tonmi[c] for c in comm_list])),
+        support_diesel_emissions_tonco2_tonmi=dict(zip(
+            comm_list,
+            [diesel_factor * support_diesel_annual_gal[c] / support_diesel_annual_tonmi[c]
+             if support_diesel_annual_tonmi[c] > 0 else 0 for c in comm_list])),
+        avg_emissions_tonco2_tonmi=dict(zip(
+            comm_list,
+            [(annual_hybrid_total_emissions[c] + diesel_factor * support_diesel_annual_gal[c]) /
+             baseline_annual_tonmi[c] if baseline_annual_tonmi[c] > 0 else 0 for c in comm_list])),
+        annual_total_emissions_tonco2=dict(zip(
+            comm_list,
+            [annual_hybrid_total_emissions[c] + diesel_factor * support_diesel_annual_gal[c]
+             for c in comm_list]))
+    )
+
+    return G
+
+
 '''
 HYDROGEN
 '''

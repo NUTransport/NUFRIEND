@@ -13,9 +13,11 @@ import warnings
 import pandas as pd
 import geopandas as gpd
 import numpy as np
+import scipy as sp
+from scipy.sparse import csr_matrix
 from copy import deepcopy
-from itertools import product
-from datetime import date
+from itertools import product, chain, combinations, islice
+from datetime import date, datetime
 import time
 import pickle as pkl
 import json
@@ -41,6 +43,7 @@ import plotly.graph_objs
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
+from plotly.offline import iplot
 import logging
 # DASH
 from dash import dash, dcc, html, Input, Output, State
@@ -61,29 +64,35 @@ sns.set_theme(palette='Set2')
 pio.renderers.default = "browser"
 tqdm.pandas()
 
+# TODO: for publicly released version:
+#  - have local directories for key input data; store template files in these as well as sample data files for example
+#  - create example/test files and sample results so that users can run and compare on their computer
+
 # GLOBAL PATHS
-# only need to alter <PERSONAL_PATH>, can take this as an input or search for it?
-PERSONAL_PATH = '/Users/adrianhz/Library/CloudStorage/OneDrive-NorthwesternUniversity/Adrian Hernandez/'
+BASE_DIR = os.path.dirname(__file__)
 # input directory
-INPUT_DIR = os.path.join(PERSONAL_PATH, 'ARPA-E LOCOMOTIVES/Alpha Framework/Input Data')
+INPUT_DIR = os.path.join(BASE_DIR, 'input')
 # input subdirectories
-CCWS_DIR = os.path.join(INPUT_DIR, 'CCWS')
-COMM_DIR = os.path.join(INPUT_DIR, 'Commodity')
-DEP_TAB_DIR = os.path.join(INPUT_DIR, 'Deployment Tables')
-GEN_DIR = os.path.join(INPUT_DIR, 'General')
+FLOW_DIR = os.path.join(INPUT_DIR, 'flow')
+COMM_DIR = os.path.join(INPUT_DIR, 'commodity')
+GEN_DIR = os.path.join(INPUT_DIR, 'general')
 LCA_DIR = os.path.join(INPUT_DIR, 'LCA')
-NX_DIR = os.path.join(INPUT_DIR, 'Networks')
+NX_DIR = os.path.join(INPUT_DIR, 'networks')
 TEA_DIR = os.path.join(INPUT_DIR, 'TEA')
-RR_DIR = os.path.join(INPUT_DIR, 'Railroad')
-SCENARIO_DIR = os.path.join(INPUT_DIR, 'Scenario')
+RR_DIR = os.path.join(INPUT_DIR, 'railroad')
+SCENARIO_DIR = os.path.join(INPUT_DIR, 'scenario')
+# TODO: remove these, do not use caching or deployment tables
+DEP_TAB_DIR = os.path.join(INPUT_DIR, 'general')
 # output directory
-OUTPUT_DIR = os.path.join(PERSONAL_PATH, 'ARPA-E LOCOMOTIVES/Alpha Framework/Output Data')
+OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
 # output subdirectories
-FIG_O_DIR = os.path.join(OUTPUT_DIR, 'Figures')
+FIG_DIR = os.path.join(OUTPUT_DIR, 'figures')
+MET_O_DIR = os.path.join(OUTPUT_DIR, 'metrics')
+NODE_O_DIR = os.path.join(OUTPUT_DIR, 'nodes')
+EDGE_O_DIR = os.path.join(OUTPUT_DIR, 'edges')
+# TODO: remove
 DEP_TAB_O_DIR = os.path.join(OUTPUT_DIR, 'Deployment')
-MET_O_DIR = os.path.join(OUTPUT_DIR, 'Metrics')
-NODE_O_DIR = os.path.join(OUTPUT_DIR, 'Nodes')
-EDGE_O_DIR = os.path.join(OUTPUT_DIR, 'Edges')
+
 
 # GLOBAL VARS
 # filename shortcuts

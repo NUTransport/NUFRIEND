@@ -36,7 +36,7 @@ def write_scenario_df(rr: str = None, fuel_type: str = None, deployment_perc: fl
     assert rr in {'BNSF', 'UP', 'NS', 'CSXT', 'KCS', 'CN', 'CP', 'USA1', 'WCAN', 'EAST'} \
            or rr is not None, 'Provide a railroad selection.'
     # fuel_type
-    assert fuel_type in {'battery', 'hydrogen', 'diesel', 'e-fuel', 'biodiesel'} \
+    assert fuel_type in {'battery', 'hydrogen', 'diesel', 'e-fuel', 'biodiesel'} or 'hybrid' in fuel_type \
            or fuel_type is not None, 'Provide an energy source selection.'
     # deployment_perc
     assert isinstance(deployment_perc, float) or isinstance(deployment_perc, int) or deployment_perc is None, \
@@ -92,7 +92,8 @@ def write_scenario_df(rr: str = None, fuel_type: str = None, deployment_perc: fl
         if clean_energy_cost is None:
             clean_energy_cost = 0.0
         # eff_energy_p_tender
-        assert isinstance(eff_energy_p_tender, float) or eff_energy_p_tender is None, \
+        assert isinstance(eff_energy_p_tender, float) or isinstance(eff_energy_p_tender, int) or \
+               eff_energy_p_tender is None, \
             'Provide a valid input for the effective energy storage per tender car.'
         if eff_energy_p_tender is None:
             eff_energy_p_tender = 10000     # kWh/tender car
@@ -121,13 +122,48 @@ def write_scenario_df(rr: str = None, fuel_type: str = None, deployment_perc: fl
         if clean_energy_cost is None:
             clean_energy_cost = 0.0
         # eff_energy_p_tender
-        assert isinstance(eff_energy_p_tender, float) or eff_energy_p_tender is None, \
+        assert isinstance(eff_energy_p_tender, float) or isinstance(eff_energy_p_tender, int) \
+               or eff_energy_p_tender is None, \
             'Provide a valid input for the effective energy storage per tender car.'
         if eff_energy_p_tender is None:
             eff_energy_p_tender = 4000  # kgh2/tender car
         # D (range) is calculated based on <eff_energy_p_tender>
         # hardcoded based on range_calcs.xls, uses info on avg. locomotive tonnage and diesel energy consumption
         D = 1047 * (1 / KM2MI)
+    # for hybrid case
+    elif 'hybrid' in fuel_type:
+        # max_util
+        assert isinstance(max_util, float) or isinstance(max_util, int) or max_util is None, \
+            'Provide a valid input for the maximum station utilization.'
+        if max_util is None:
+            max_util = 0.88
+        else:
+            assert 0 <= max_util <= 1, 'Maximum station utilization must be a <float> between zero and one.'
+            util_rates = np.array([0.15, 0.29, 0.44, 0.58, 0.73, 0.88])
+            if max_util <= min(util_rates):
+                max_util = min(util_rates)
+            else:
+                max_util = util_rates[max(np.where(util_rates <= max_util)[0])]
+        # D (range)
+        assert isinstance(D, float) or isinstance(D, int) or D is None, 'Provide a valid input for energy source range.'
+        if D is None:
+            D = 1.6 * 400
+        # station_type
+        assert station_type == '3MW' or station_type is None, \
+            'A station type of ' + station_type + ' is not an adequate station type for the energy source selected.'
+        if station_type is None:
+            station_type = '3MW'
+        # clean_energy_cost
+        assert isinstance(clean_energy_cost, float) or isinstance(clean_energy_cost, int) or \
+               clean_energy_cost is None, 'Provide a valid input for the cost of clean energy.'
+        if clean_energy_cost is None:
+            clean_energy_cost = 0.0
+        # eff_energy_p_tender
+        assert isinstance(eff_energy_p_tender, float) or isinstance(eff_energy_p_tender, int)\
+               or eff_energy_p_tender is None, \
+            'Provide a valid input for the effective energy storage per tender car.'
+        if eff_energy_p_tender is None:
+            eff_energy_p_tender = 10000  # kWh/tender car
     else:
         # max_util
         assert isinstance(max_util, float) or isinstance(max_util, int) or max_util is None, \
@@ -262,10 +298,17 @@ OUTPUT
 def get_val_from_code(scenario_code: str, key: str):
     df_legend = load_scenario_codification_legend()
     df_key = df_legend.loc[(key, slice(None))].reset_index()
-    idx = int(df_key['Order'].values[0])
-    df_key.index = df_key['Code']
 
-    return df_key.loc[int(scenario_code[idx]), 'Value']
+    if df_key['Value'].values[0] == '0':
+        start = int(df_key['Start'].values[0])
+        end = int(df_key['Start'].values[0] + df_key['Length'].values[0])
+
+        return scenario_code[start: end]
+    else:
+        idx = int(df_key['Order'].values[0])
+        df_key.index = df_key['Code']
+
+        return df_key.loc[int(scenario_code[idx]), 'Value']
 
 
 def codify_scenario_output_file(df_scenario, deployment_table=False):
@@ -453,13 +496,13 @@ CACHE PLOT
 
 
 def cache_plot(fig: plotly.graph_objs.Figure, scenario_code: str):
-    with open(os.path.join(FIG_O_DIR, scenario_code + '.json'), 'w') as figf:
+    with open(os.path.join(FIG_DIR, scenario_code + '.json'), 'w') as figf:
         figf.write(fig.to_json())
     figf.close()
 
 
 def load_scenario_plot(scenario_code: str):
-    filepath = os.path.join(FIG_O_DIR, scenario_code + '.json')
+    filepath = os.path.join(FIG_DIR, scenario_code + '.json')
     if os.path.exists(filepath):
         return plotly.io.read_json(filepath)
     else:

@@ -1,7 +1,6 @@
 """Simplify, correct, and consolidate network topology.
 Taken from OSMNX simplification module. Edited by AHT8237.
 """
-import time
 
 from util import *
 # MODULES

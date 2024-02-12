@@ -1,14 +1,16 @@
+import networkx as nx
+
 from util import *
 # MODULES
-from helper import elec_rate_state
+from helper import elec_rate_state, regional_alignments
 from input_output import load_cached_graph, write_scenario_df, load_scenario_df, cache_graph, \
-    codify_scenario_output_file, cache_exists
+    codify_scenario_output_file, cache_exists, get_val_from_code
 from network_representation import load_simplified_consolidated_graph
 from routing import ods_by_perc_ton_mi, route_flows
 from facility_deployment import facility_location
-from facility_sizing import facility_sizing
-from tea import tea_battery_all_facilities, tea_dropin, tea_hydrogen_all_facilities
-from lca import lca_battery, lca_dropin, lca_hydrogen
+from facility_sizing import facility_sizing, facility_sizing_hybrid
+from tea import tea_battery_all_facilities, tea_dropin, tea_hydrogen_all_facilities, tea_hybrid
+from lca import lca_battery, lca_dropin, lca_hydrogen, lca_hybrid
 from plotting import plot_scenario
 
 
@@ -22,12 +24,12 @@ def run_scenario(rr: str = None, fuel_type: str = None, deployment_perc: float =
                  clean_energy=False, clean_energy_cost: float = None, emissions_obj=False,
                  CCWS_filename: str = None, perc_ods: float = None, comm_group: str = 'TOTAL',
                  time_window: tuple = None, freq: str = 'M',
-                 eff_energy_p_tender: float = None,
+                 eff_energy_p_tender: float = None, tender_cost_p_tonmi: float = None, diesel_cost_p_gal: float = None,
                  suppress_output=True, binary_prog=True, select_cycles=False, max_flow=False, budget: int = None,
                  deviation_paths=True, extend_graph=True, od_flow_perc: float = 1,
                  G: nx.DiGraph = None, radius: float = None, intertypes: set = None,
                  scenario_code: str = None, deployment_table=False,
-                 plot=True, load_scenario=True, cache_scenario=True, legend_show=True):
+                 plot=True, load_scenario=True, cache_scenario=False, legend_show=True):
     # deployment_table = True means we are creating the deployment table and bypass the deployment_table lookup
 
     if not scenario_code:
@@ -63,9 +65,11 @@ def run_scenario(rr: str = None, fuel_type: str = None, deployment_perc: float =
             df_scenario['perc_ods'] = perc_ods
         G = run_scenario_df(df_scenario=df_scenario, G=G,
                             select_cycles=select_cycles, deviation_paths=deviation_paths,
-                            max_flow=max_flow, budget=budget, extend_graph=extend_graph, od_flow_perc=od_flow_perc)
+                            max_flow=max_flow, budget=budget, extend_graph=extend_graph,
+                            od_flow_perc=od_flow_perc)
 
         if cache_scenario:
+        # if False:
             t0 = time.time()
             cache_graph(G=G, scenario_code=scenario_code)
             print('CACHE GRAPH:: %s seconds ---' % round(time.time() - t0, 3))
@@ -73,7 +77,8 @@ def run_scenario(rr: str = None, fuel_type: str = None, deployment_perc: float =
     G = update_graph_values(G=G, fuel_type=df_scenario['fuel_type'], max_util=df_scenario['max_util'],
                             station_type=df_scenario['station_type'],
                             clean_energy=clean_energy, clean_energy_cost=clean_energy_cost,
-                            h2_fuel_type=h2_fuel_type)
+                            h2_fuel_type=h2_fuel_type, tender_cost_p_tonmi=tender_cost_p_tonmi,
+                            diesel_cost_p_gal=diesel_cost_p_gal)
 
     if plot:
         t0 = time.time()
@@ -90,11 +95,15 @@ def run_scenario(rr: str = None, fuel_type: str = None, deployment_perc: float =
 
 def update_graph_values(G: nx.DiGraph, fuel_type: str, max_util: float, station_type: str,
                         clean_energy=True, clean_energy_cost: float = None,
-                        h2_fuel_type: str = None):
+                        h2_fuel_type: str = None, tender_cost_p_tonmi: float = None,
+                        diesel_cost_p_gal: float = None) -> nx.DiGraph:
     # valid <h2_fuel_type> values:
     # ['Natural Gas', 'NG with CO2 Sequestration', 'PEM Electrolysis - Solar', 'PEM Electrolysis - Nuclear']
 
-    if not clean_energy:
+    if 'hybrid' in fuel_type:
+        return G
+
+    if not clean_energy and tender_cost_p_tonmi is None and diesel_cost_p_gal is None:
         return G
 
     if clean_energy_cost is None:
@@ -108,7 +117,10 @@ def update_graph_values(G: nx.DiGraph, fuel_type: str, max_util: float, station_
 
         t0 = time.time()
         G = tea_battery_all_facilities(G, max_util=max_util, station_type=station_type,
-                                       clean_energy_cost=clean_energy_cost)
+                                       clean_energy_cost=clean_energy_cost, tender_cost_p_tonmi=tender_cost_p_tonmi,
+                                       diesel_cost_p_gal=diesel_cost_p_gal)
+        G = tea_dropin(G, fuel_type='diesel', deployment_perc=1, scenario_fuel_type=fuel_type,
+                       diesel_cost_p_gal=diesel_cost_p_gal)
         print('TEA UPDATE:: ' + str(time.time() - t0))
 
     elif fuel_type == 'hydrogen':
@@ -121,7 +133,9 @@ def update_graph_values(G: nx.DiGraph, fuel_type: str, max_util: float, station_
 
         t0 = time.time()
         G = tea_hydrogen_all_facilities(G=G, max_util=max_util, station_type=station_type,
-                                        clean_energy_cost=clean_energy_cost)
+                                        clean_energy_cost=clean_energy_cost, diesel_cost_p_gal=diesel_cost_p_gal)
+        G = tea_dropin(G, fuel_type='diesel', deployment_perc=1, scenario_fuel_type=fuel_type,
+                       diesel_cost_p_gal=diesel_cost_p_gal)
         print('TEA UPDATE:: ' + str(time.time() - t0))
 
     G = operations_stats(G)
@@ -130,7 +144,8 @@ def update_graph_values(G: nx.DiGraph, fuel_type: str, max_util: float, station_
 
 def run_scenario_df(df_scenario: pd.DataFrame, G: nx.DiGraph = None,
                     select_cycles=False, deviation_paths=True,
-                    max_flow=False, budget: int = None, extend_graph=True, od_flow_perc: float = 1):
+                    max_flow=False, budget: int = None, extend_graph=True,
+                    od_flow_perc: float = 1):
     t0_total = time.time()
 
     if isinstance(df_scenario, pd.DataFrame):
@@ -196,7 +211,8 @@ def run_scenario_df(df_scenario: pd.DataFrame, G: nx.DiGraph = None,
         t0 = time.time()
         if select_cycles:
             # select almost all O-D pairs with non-zero flow (leave out the 20% with the lowest flow values; too many)
-            ods, od_flows = ods_by_perc_ton_mi(G=G, perc_ods=od_flow_perc, CCWS_filename=CCWS_filename)
+            ods, od_flows = ods_by_perc_ton_mi(G=G, perc_ods=od_flow_perc, CCWS_filename=CCWS_filename,
+                                               od_flows_truncate=True)
         if not select_cycles:
             ods, od_flows = ods_by_perc_ton_mi(G=G, perc_ods=perc_ods, CCWS_filename=CCWS_filename)
         G.graph['framework'] = dict(ods=ods)
@@ -267,13 +283,14 @@ def run_scenario_df(df_scenario: pd.DataFrame, G: nx.DiGraph = None,
         print('LOOKUP TABLE:: %s seconds ---' % round(time.time() - t0, 3))
 
         t0 = time.time()
-        ods = ods_by_perc_ton_mi(G=G, perc_ods=perc_ods, CCWS_filename=CCWS_filename)
+        ods, od_flows = ods_by_perc_ton_mi(G=G, perc_ods=perc_ods, CCWS_filename=CCWS_filename)
         G.graph['framework'] = dict(ods=ods)
         print('OD LIST:: %s seconds ---' % round(time.time() - t0, 3))
 
         t0 = time.time()
         # 2. locate facilities and extract graph form of this, G, and its induced subgraph, H
-        G, H = facility_location(G, D=D, ods=ods, binary_prog=binary_prog, suppress_output=suppress_output)
+        G, H = facility_location(G, D=D, ods=ods, od_flows=od_flows,
+                                 binary_prog=binary_prog, suppress_output=suppress_output)
         print('FACILITY LOCATION:: %s seconds ---' % round(time.time() - t0, 3))
 
         # if no facilities are selected
@@ -310,6 +327,85 @@ def run_scenario_df(df_scenario: pd.DataFrame, G: nx.DiGraph = None,
         G = lca_dropin(G, fuel_type='diesel', deployment_perc=1, scenario_fuel_type=fuel_type)
         G = lca_dropin(G, fuel_type='biodiesel', deployment_perc=actual_dep_perc, scenario_fuel_type=fuel_type)
         G = lca_dropin(G, fuel_type='e-fuel', deployment_perc=actual_dep_perc, scenario_fuel_type=fuel_type)
+        print('LCA:: %s seconds ---' % round(time.time() - t0, 3))
+
+    elif 'hybrid' in fuel_type:
+        # add in regional alignment information to G (based on A-STEP simulation tool)
+        G = regional_alignments(G)
+
+        G.graph['scenario'] = dict(railroad=rr, range_mi=D * KM2MI, fuel_type=fuel_type,
+                                   desired_deployment_perc=deployment_perc, reroute=reroute,
+                                   switch_tech=switch_tech,
+                                   max_reroute_inc=max_reroute_inc, max_util=max_util, station_type=station_type,
+                                   eff_kwh_p_batt=eff_energy_p_tender, scenario_code=scenario_code)
+        # 1. load od_flow_dict for ranking OD pairs and choosing top <perc_ods> for flows for facility location
+        t0 = time.time()
+        # if perc_ods is None or perc_ods == 'X':
+        #     perc_ods = deployment_perc_lookup_table(df_scenario=df_scenario, deployment_perc=deployment_perc)
+        print('LOOKUP TABLE:: %s seconds ---' % round(time.time() - t0, 3))
+
+        t0 = time.time()
+        if select_cycles:
+            # select almost all O-D pairs with non-zero flow (leave out the 20% with the lowest flow values; too many)
+            ods, od_flows = ods_by_perc_ton_mi(G=G, perc_ods=od_flow_perc, CCWS_filename=CCWS_filename,
+                                               od_flows_truncate=True)
+        if not select_cycles:
+            ods, od_flows = ods_by_perc_ton_mi(G=G, perc_ods=perc_ods, CCWS_filename=CCWS_filename)
+            print(len(ods))
+        G.graph['framework'] = dict(ods=ods)
+        print('OD LIST:: %s seconds ---' % round(time.time() - t0, 3))
+
+        t0 = time.time()
+        # 2. locate facilities and extract graph form of this, G, and its induced subgraph, H
+        G, H = facility_location(G, D=D, ods=ods, od_flows=od_flows, flow_min=perc_ods, select_cycles=select_cycles,
+                                 budget=budget, max_flow=max_flow, extend_graph=extend_graph, od_flow_perc=od_flow_perc,
+                                 deviation_paths=deviation_paths,
+                                 binary_prog=binary_prog, suppress_output=suppress_output)
+        print('FACILITY LOCATION:: %s seconds ---' % round(time.time() - t0, 3))
+
+        # if no facilities are selected
+        if G.graph['number_facilities'] == 0:
+            return G
+
+        t0 = time.time()
+        # 3. reroute flows and get peak and average ton and locomotive flows for each edge
+        G, H = route_flows(G=G, fuel_type=fuel_type, H=G, D=D, CCWS_filename=CCWS_filename,
+                           time_window=time_window, freq=freq,
+                           reroute=reroute, switch_tech=switch_tech, max_reroute_inc=max_reroute_inc)
+        print('FLOW ASSIGNMENT:: %s seconds ---' % round(time.time() - t0, 3))
+
+        t0 = time.time()
+        # 4. facility sizing based on peak flows and utilization based on average flows
+        # load cost by state dataframe and assign to each node
+        # emissions_p_location = elec_rate_state(G, emissions=True, clean_energy=clean_energy,
+        #                                        clean_elec_prem_dolkwh=clean_energy_cost)  # [gCO2/kWh]
+        # cost_p_location = elec_rate_state(G, clean_energy=clean_energy,
+        #                                   clean_elec_prem_dolkwh=clean_energy_cost)  # in [$/MWh]
+
+        G = facility_sizing_hybrid(G=G, H=H, fuel_type=fuel_type, D=D, emissions_obj=emissions_obj,
+                                   suppress_output=suppress_output)
+        print('FACILITY SIZING:: %s seconds ---' % round(time.time() - t0, 3))
+
+        t0 = time.time()
+        actual_dep_perc = G.graph['operations']['deployment_perc'][comm_group]
+        G.graph['scenario']['actual_deployment_perc'] = actual_dep_perc
+        # TODO: fix for hybrid
+        # 5.1. TEA
+        G = tea_hybrid(G, max_util=max_util, station_type=station_type)
+        # baseline and other dropin fuels (easy factor calculation)
+        G = tea_dropin(G, fuel_type='diesel', deployment_perc=1, scenario_fuel_type=fuel_type)
+        # G = tea_dropin(G, fuel_type='biodiesel', deployment_perc=actual_dep_perc, scenario_fuel_type=fuel_type)
+        # G = tea_dropin(G, fuel_type='e-fuel', deployment_perc=actual_dep_perc, scenario_fuel_type=fuel_type)
+        print('TEA:: %s seconds ---' % round(time.time() - t0, 3))
+
+        t0 = time.time()
+        # TODO: fix for hybrid
+        # 5.2. LCA
+        G = lca_hybrid(G, clean_energy=clean_energy)
+        # baseline and other dropin fuels (easy factor calculation)
+        G = lca_dropin(G, fuel_type='diesel', deployment_perc=1, scenario_fuel_type=fuel_type)
+        # G = lca_dropin(G, fuel_type='biodiesel', deployment_perc=actual_dep_perc, scenario_fuel_type=fuel_type)
+        # G = lca_dropin(G, fuel_type='e-fuel', deployment_perc=actual_dep_perc, scenario_fuel_type=fuel_type)
         print('LCA:: %s seconds ---' % round(time.time() - t0, 3))
 
     elif fuel_type == 'e-fuel' or fuel_type == 'biodiesel' or fuel_type == 'diesel':
@@ -372,6 +468,12 @@ def operations_stats(G: nx.DiGraph) -> nx.DiGraph:
                     [-1e-3 * (G.graph['energy_source_TEA']['total_scenario_LCO_tonmi'][c] -
                               G.graph['diesel_TEA']['total_LCO_tonmi'][c]) /
                      (G.graph['energy_source_LCA']['avg_emissions_tonco2_tonmi'][c] -
+                      G.graph['diesel_LCA']['total_emissions_tonco2_tonmi'][c]) for c in comm_list])),
+                cost_avoided_emissions_no_delay=dict(zip(
+                    comm_list,
+                    [-1e-3 * (G.graph['energy_source_TEA']['total_scenario_nodelay_LCO_tonmi'][c] -
+                              G.graph['diesel_TEA']['total_LCO_tonmi'][c]) /
+                     (G.graph['energy_source_LCA']['avg_emissions_tonco2_tonmi'][c] -
                       G.graph['diesel_LCA']['total_emissions_tonco2_tonmi'][c]) for c in comm_list]))
             ))
     elif G.graph['scenario']['fuel_type'] == 'hydrogen':
@@ -396,6 +498,44 @@ def operations_stats(G: nx.DiGraph) -> nx.DiGraph:
                 cost_avoided_emissions=dict(zip(
                     comm_list,
                     [-1e-3 * (G.graph['energy_source_TEA']['total_scenario_LCO_tonmi'][c] -
+                              G.graph['diesel_TEA']['total_LCO_tonmi'][c]) /
+                     (G.graph['energy_source_LCA']['avg_emissions_tonco2_tonmi'][c] -
+                      G.graph['diesel_LCA']['total_emissions_tonco2_tonmi'][c]) for c in comm_list])),
+                cost_avoided_emissions_no_delay=dict(zip(
+                    comm_list,
+                    [-1e-3 * (G.graph['energy_source_TEA']['total_scenario_LCO_tonmi'][c] -
+                              G.graph['diesel_TEA']['total_LCO_tonmi'][c]) /
+                     (G.graph['energy_source_LCA']['avg_emissions_tonco2_tonmi'][c] -
+                      G.graph['diesel_LCA']['total_emissions_tonco2_tonmi'][c]) for c in comm_list]))
+            ))
+    elif 'hybrid' in G.graph['scenario']['fuel_type']:
+        # G.graph['operations'].update(
+        #     dict(
+        #         emissions_change=100 * ((G.graph['diesel_LCA']['annual_total_emissions_tonco2'][comm_group] -
+        #                                  G.graph['energy_source_LCA']['annual_total_emissions_tonco2']) /
+        #                                 G.graph['diesel_LCA']['annual_total_emissions_tonco2'][comm_group]),
+        #         cost_avoided_emissions=-1e-3 * ((G.graph['energy_source_TEA']['total_scenario_LCO_tonmi'] -
+        #                                          G.graph['diesel_TEA']['total_LCO_tonmi']) /
+        #                                         (G.graph['energy_source_LCA']['avg_emissions_tonco2_tonmi'] -
+        #                                          G.graph['diesel_LCA']['total_emissions_tonco2_tonmi']))
+        #     )
+        # )
+        G.graph['operations'].update(
+            dict(
+                emissions_change=dict(zip(
+                    comm_list,
+                    [100 * (G.graph['diesel_LCA']['annual_total_emissions_tonco2'][c] -
+                            G.graph['energy_source_LCA']['annual_total_emissions_tonco2'][c]) /
+                     G.graph['diesel_LCA']['annual_total_emissions_tonco2'][c] for c in comm_list])),
+                cost_avoided_emissions=dict(zip(
+                    comm_list,
+                    [-1e-3 * (G.graph['energy_source_TEA']['total_scenario_LCO_tonmi'][c] -
+                              G.graph['diesel_TEA']['total_LCO_tonmi'][c]) /
+                     (G.graph['energy_source_LCA']['avg_emissions_tonco2_tonmi'][c] -
+                      G.graph['diesel_LCA']['total_emissions_tonco2_tonmi'][c]) for c in comm_list])),
+                cost_avoided_emissions_no_delay=dict(zip(
+                    comm_list,
+                    [-1e-3 * (G.graph['energy_source_TEA']['total_scenario_nodelay_LCO_tonmi'][c] -
                               G.graph['diesel_TEA']['total_LCO_tonmi'][c]) /
                      (G.graph['energy_source_LCA']['avg_emissions_tonco2_tonmi'][c] -
                       G.graph['diesel_LCA']['total_emissions_tonco2_tonmi'][c]) for c in comm_list]))
@@ -435,13 +575,13 @@ DEPLOYMENT TABLES
 '''
 
 
-def deployment_perc_stats(scenario_code: str):
+def deployment_perc_stats(scenario_code: str, overwrite=False):
     # return percentage of ods needed to be routed to produce a desired deployment_perc for given scenario
     # may need more scenario params passed to here i.e., range, reroute, switch_tech, max_reroute_inc
     # store in files for easy access
 
     filepath = os.path.join(DEP_TAB_O_DIR, scenario_code + '.csv')
-    if not os.path.exists(filepath):
+    if not os.path.exists(filepath) or overwrite:
         perc_ods = [round(i, 2) for i in np.linspace(0, 1, 51)]
         # perc_ods = [round(i, 2) for i in np.linspace(0, 1, 21)]
         # perc_ods = [round(i, 2) for i in np.linspace(0, 1, 5)]
@@ -458,22 +598,26 @@ def deployment_perc_stats(scenario_code: str):
         if fuel_type == 'battery':
             cols = ['deployment_perc', 'station_total', 'station_annual_cost', 'battery_annual_cost',
                     'station_LCO_tonmi', 'battery_LCO_tonmi', 'om_LCO_tonmi', 'energy_LCO_tonmi', 'delay_LCO_tonmi',
-                    'total_LCO_tonmi', 'total_scenario_LCO_tonmi',
+                    'total_LCO_tonmi', 'total_scenario_LCO_tonmi', 'total_scenario_nodelay_LCO_tonmi',
+                    'baseline_LCO_tonmi',
                     'actual_utilization', 'number_chargers', 'number_facilities',
                     'avg_queue_time_p_loc', 'avg_queue_length', 'peak_queue_time_p_loc', 'peak_queue_length',
                     'avg_daily_delay_cost_p_car', 'total_annual_delay_cost', 'battery_emissions_tonco2_tonmi',
                     'avg_emissions_tonco2_tonmi', 'scenario_annual_emissions_tonco2', 'alt_tech_annual_tonmi',
-                    'scenario_annual_tonmi', 'emissions_change', 'cost_avoided_emissions_$_kg',
+                    'scenario_annual_tonmi', 'emissions_change',
+                    'cost_avoided_emissions_$_kg', 'cost_avoided_emissions_no_delay_$_kg',
                     'inflation_tonmi', 'inflation_mi', 'baseline_annual_tonmi', 'baseline_annual_emissions_tonco2']
         elif fuel_type == 'hydrogen':
             cols = ['deployment_perc', 'station_total', 'station_annual_cost',
                     'station_LCO_tonmi', 'terminal_LCO_tonmi', 'liquefier_LCO_tonmi', 'fuel_LCO_tonmi',
                     'tender_LCO_tonmi', 'delay_LCO_tonmi', 'total_LCO_tonmi', 'total_scenario_LCO_tonmi',
+                    'total_scenario_nodelay_LCO_tonmi', 'baseline_LCO_tonmi',
                     'actual_utilization', 'number_pumps', 'number_facilities',
                     'avg_queue_time_p_loc', 'avg_queue_length', 'peak_queue_time_p_loc', 'peak_queue_length',
                     'avg_daily_delay_cost_p_car', 'total_annual_delay_cost', 'hydrogen_emissions_tonco2_tonmi',
                     'avg_emissions_tonco2_tonmi', 'scenario_annual_emissions_tonco2', 'alt_tech_annual_tonmi',
-                    'scenario_annual_tonmi', 'emissions_change', 'cost_avoided_emissions_$_kg',
+                    'scenario_annual_tonmi', 'emissions_change',
+                    'cost_avoided_emissions_$_kg', 'cost_avoided_emissions_no_delay_$_kg',
                     'inflation_tonmi', 'inflation_mi', 'baseline_annual_tonmi', 'baseline_annual_emissions_tonco2']
 
         df = pd.DataFrame(data=0, columns=cols, index=perc_ods)
@@ -500,6 +644,8 @@ def deployment_perc_stats(scenario_code: str):
                                           G.graph['energy_source_TEA']['delay_LCO_tonmi']['TOTAL'],
                                           G.graph['energy_source_TEA']['total_LCO_tonmi']['TOTAL'],
                                           G.graph['energy_source_TEA']['total_scenario_LCO_tonmi']['TOTAL'],
+                                          G.graph['energy_source_TEA']['total_scenario_nodelay_LCO_tonmi']['TOTAL'],
+                                          G.graph['diesel_TEA']['total_LCO_tonmi']['TOTAL'],
                                           G.graph['energy_source_TEA']['actual_utilization'],
                                           G.graph['energy_source_TEA']['number_chargers'],
                                           G.graph['number_facilities'],
@@ -516,6 +662,7 @@ def deployment_perc_stats(scenario_code: str):
                                           G.graph['operations']['scenario_total_annual_tonmi']['TOTAL'],
                                           G.graph['operations']['emissions_change']['TOTAL'],
                                           G.graph['operations']['cost_avoided_emissions']['TOTAL'],
+                                          G.graph['operations']['cost_avoided_emissions_no_delay']['TOTAL'],
                                           G.graph['operations']['perc_tonmi_inc']['TOTAL'],
                                           G.graph['operations']['perc_mi_inc']['TOTAL'],
                                           G.graph['operations']['baseline_total_annual_tonmi']['TOTAL'],
@@ -532,6 +679,8 @@ def deployment_perc_stats(scenario_code: str):
                                           G.graph['energy_source_TEA']['delay_LCO_tonmi']['TOTAL'],
                                           G.graph['energy_source_TEA']['total_LCO_tonmi']['TOTAL'],
                                           G.graph['energy_source_TEA']['total_scenario_LCO_tonmi']['TOTAL'],
+                                          G.graph['energy_source_TEA']['total_scenario_nodelay_LCO_tonmi']['TOTAL'],
+                                          G.graph['diesel_TEA']['total_LCO_tonmi']['TOTAL'],
                                           G.graph['energy_source_TEA']['actual_utilization'],
                                           G.graph['energy_source_TEA']['number_pumps'],
                                           G.graph['number_facilities'],
@@ -548,6 +697,7 @@ def deployment_perc_stats(scenario_code: str):
                                           G.graph['operations']['scenario_total_annual_tonmi']['TOTAL'],
                                           G.graph['operations']['emissions_change']['TOTAL'],
                                           G.graph['operations']['cost_avoided_emissions']['TOTAL'],
+                                          G.graph['operations']['cost_avoided_emissions_no_delay']['TOTAL'],
                                           G.graph['operations']['perc_tonmi_inc']['TOTAL'],
                                           G.graph['operations']['perc_mi_inc']['TOTAL'],
                                           G.graph['operations']['baseline_total_annual_tonmi']['TOTAL'],
@@ -621,10 +771,39 @@ def cache_everything():
     return ["Cached!"]
 
 
+def rerun_deployment_tables():
+    RR_list = ['BNSF', 'NS', 'WCAN', 'EAST', 'USA1']
+    range_list = [200, 400, 800, 1000, 1500]
+    ES_list = ['battery', 'hydrogen']
+    station_type = {'battery': '3MW', 'hydrogen': 'Cryo-pump'}
+    reroute_list = [False, True]
+    max_reroute_inc = 0.5
+
+    for es in ES_list:
+        for rr in RR_list:
+            for D in range_list:
+                for reroute in reroute_list:
+                    df_scenario = write_scenario_df(rr=rr, fuel_type=es, deployment_perc=None,
+                                                    D=D, reroute=reroute, switch_tech=False,
+                                                    max_reroute_inc=max_reroute_inc,
+                                                    max_util=None, station_type=station_type[es],
+                                                    deployment_table=True)
+                    scenario_code = df_scenario['scenario_code']
+                    try:
+                        _ = deployment_perc_stats(scenario_code=scenario_code, overwrite=True)
+                    except FileNotFoundError:
+                        continue
+
+    return ["Rerun!"]
+
+
 '''
 PLOT STATS
 '''
 
+
+# OF INTEREST
+# 03XXX16000050X88X200101123100
 
 def plot_stats(scenario_code: str, figshow=False):
     df_scenario = load_scenario_df(scenario_code=scenario_code)
@@ -1032,6 +1211,172 @@ def plot_stats(scenario_code: str, figshow=False):
 
     fig.tight_layout()
     fig.subplots_adjust(bottom=0.2)
+    plt.savefig(os.path.join(DEP_TAB_O_DIR, 'Figures', scenario_code + 'diff_AC_MC.png'), dpi=300, format='png')
+    if figshow:
+        plt.show()
+    else:
+        plt.close(fig)
+
+    return
+
+
+def plot_ac_mc(scenario_code: str, figshow=False):
+
+    # TODO: fix plots, add in scenario information on bottom if possible
+    df_scenario = load_scenario_df(scenario_code=scenario_code)
+    fuel_type = df_scenario['fuel_type']
+
+    filename = scenario_code + '.csv'
+    filepath = os.path.join(DEP_TAB_O_DIR, filename)
+    df = pd.read_csv(filepath, header=0)
+
+    df.dropna(inplace=True)
+    idxs_keep = []
+    for i in df.index:
+        if df.loc[i, 'deployment_perc'] > 0:
+            idxs_keep.append(i)
+    df = df.loc[idxs_keep]
+    # df['deployment_perc'] = df['deployment_perc'] * 100
+    # df['perc_ods'] = df['perc_ods'] * 100
+
+    [red, blue, grey, purple, yellow, green] = ['tab:red', 'tab:blue', 'tab:gray', 'tab:purple', 'orange', 'green']
+
+    # clean data points and fit data
+    # compute gross emissions reduction amount and total and marginal cost curves
+    df['gross_emissions_change_tonco2'] = (df['baseline_annual_emissions_tonco2'] -
+                                           df['scenario_annual_emissions_tonco2'])
+    df['total_cost_avoided_emissions'] = 1e3 * df['cost_avoided_emissions_$_kg'] * df['gross_emissions_change_tonco2']
+    # get only positive values of gross emissions change and cost of avoided emissions for the fitting
+    df['gross_emissions_change_tonco2'] = df[(df['gross_emissions_change_tonco2'] > 0) &
+                                             (df['cost_avoided_emissions_$_kg'] > 0)]['gross_emissions_change_tonco2']
+    df['total_cost_avoided_emissions'] = df[(df['gross_emissions_change_tonco2'] > 0) &
+                                            (df['cost_avoided_emissions_$_kg'] > 0)]['total_cost_avoided_emissions']
+    dfp = df[['gross_emissions_change_tonco2', 'total_cost_avoided_emissions']].copy().dropna()
+    # for a polynomial fit of the form: TC = a * GE^3 + b * GE^2 + c * GE + d
+    (d, c, b, a) = np.polynomial.polynomial.polyfit(dfp['gross_emissions_change_tonco2'],
+                                                    dfp['total_cost_avoided_emissions'], 3)
+    (amcp, bmcp, cmcp) = [a * 3, b * 2, c]
+    df['total_cost_avoided_emissions_poly'] = 1e3 * (a * df['gross_emissions_change_tonco2'] ** 3 +
+                                                     b * df['gross_emissions_change_tonco2'] ** 2 +
+                                                     c * df['gross_emissions_change_tonco2'] + d)
+    df['average_cost_avoided_emissions_poly'] = 1e-3 * (df['total_cost_avoided_emissions_poly'] /
+                                                        df['gross_emissions_change_tonco2'])
+    dfp['marginal_cost_avoided_emissions_$_kg_poly'] = 1e-3 * (amcp * dfp['gross_emissions_change_tonco2'] ** 2 +
+                                                               bmcp * dfp['gross_emissions_change_tonco2'] + cmcp)
+    # for an exponential fit of the form: TC = a * b^GE ==> ln(TC) = ln(a) + ln(b) * GE
+    # weight for each value of y be its magnitude for better fit
+    # (lna, lnb) = np.polynomial.polynomial.polyfit(dfp['gross_emissions_change_tonco2'],
+    #                                               np.log(dfp['total_cost_avoided_emissions']), 1,
+    #                                               w=np.sqrt(dfp['total_cost_avoided_emissions']))
+    # (amce, bmce) = [np.exp(lna) * lnb, np.exp(lnb)]
+    # df['total_cost_avoided_emissions_exp'] = 1e3 * (a * df['gross_emissions_change_tonco2'] ** 3 +
+    #                                                  b * df['gross_emissions_change_tonco2'] ** 2 +
+    #                                                  c * df['gross_emissions_change_tonco2'] + d)
+    # df['average_cost_avoided_emissions_exp'] = 1e-3 * (df['total_cost_avoided_emissions_poly'] /
+    #                                                     df['gross_emissions_change_tonco2'])
+    # dfp['marginal_cost_avoided_emissions_$_kg_exp'] = 1e-3 * amce * (bmce ** dfp['gross_emissions_change_tonco2'])
+
+    ge_x = np.array(df['gross_emissions_change_tonco2'])
+    tc_y = np.array(df['total_cost_avoided_emissions'])
+    idxs_dominated = []
+    for i in range(len(ge_x)):
+        for j in range(len(ge_x)):
+            if i != j:
+                if ge_x[j] >= ge_x[i] and tc_y[j] <= tc_y[i]:
+                    idxs_dominated.append(i)
+                    break
+    idxs_keep = list(set(df.index).difference(set(idxs_dominated)))
+    ge_x, tc_y, ac_y = zip(*sorted(zip(df.loc[idxs_keep, 'gross_emissions_change_tonco2'].values,
+                                       df.loc[idxs_keep, 'total_cost_avoided_emissions'].values,
+                                       df.loc[idxs_keep, 'cost_avoided_emissions_$_kg'].values)))
+    ge_x = 1e-3 * np.array(ge_x)
+    tc_y = np.array(tc_y)
+    ac_y = np.array(ac_y)
+    # ge_x = df.loc[idxs_keep, 'gross_emissions_change_tonco2'].values
+    # tc_y = df.loc[idxs_keep, 'total_cost_avoided_emissions'].values
+    # ac_y = df.loc[idxs_keep, 'cost_avoided_emissions_$_kg'].values
+    #
+    mc_y = np.array([])
+    gec_x = np.array([])
+    for i in range(1, len(tc_y)):
+        ge = (ge_x[i] - ge_x[i - 1]) / 2
+        mc = 1e-6 * (tc_y[i] - tc_y[i - 1]) / (2 * ge)
+        mc_y = np.append(mc_y, mc)
+        gec_x = np.append(gec_x, ge + ge_x[i - 1])
+
+    # plotting
+    sns.set_theme(palette='Set2')
+    # sns.set_style("whitegrid")
+    matplotlib.rcParams.update({'font.size': 12})
+    plt.rcParams['text.usetex'] = True
+
+    # SECTION 3: clean, numerical fit, TC, AC, MC
+    fig = plt.figure(figsize=(12, 7))
+    ax = fig.gca()
+    ax.set_title('Cost of Avoided Emissions vs. Gross Emissions Reduction')
+    ax.set_xlabel('Gross Emissions Reduction [kt CO$_2$]')
+    ax.set_ylabel('Cost of Avoided Emissions [\$/kg CO$_2$]')
+    axr = ax.twinx()  # second y axes
+    axr.set_ylabel('Total Cost [M\$]', color=yellow)
+
+    # ax.plot(ge_x, tc_y, '-*', color=yellow, label='TC')
+    ax.plot(ge_x, ac_y, 'd-', color=red, label='AC', zorder=1)
+    ax.plot(gec_x, mc_y, 'o-', color=blue, markersize=5, label='MC', zorder=1)
+    # ax.plot(dfp['gross_emissions_change_tonco2'] * 1e-3, dfp['marginal_cost_avoided_emissions_$_kg_poly'],
+    #         '+', color=blue, markersize=7, label='MC-Poly Fit')
+    # ax.plot(dfp['gross_emissions_change_tonco2'] * 1e-3, dfp['marginal_cost_avoided_emissions_$_kg_exp'],
+    #         'x', color=blue, markersize=6, label='MC-Exp Fit')
+
+    # a32.plot(dfp['gross_emissions_change_tonco2'] * 1e-3, dfp['marginal_cost_avoided_emissions_$_kg_poly'],
+    #          '+', color=red, markersize=7, label='MC-Poly Fit')
+    # a32.plot(dfp['gross_emissions_change_tonco2'] * 1e-3, dfp['marginal_cost_avoided_emissions_$_kg_exp'],
+    #          'x', color=blue, markersize=6, label='MC-Exp Fit')
+    x = np.linspace(dfp['gross_emissions_change_tonco2'].min(), dfp['gross_emissions_change_tonco2'].max(), 100)
+    ax.plot(1e-3 * x, 1e-3 * (a * x ** 2 + b * x + c + d / x), linestyle=(0, (5, 2, 1, 2, 1, 2)),
+            color=red, label='AC-Poly Fit', zorder=1)
+    # ax.plot(1e-3 * x, 1e-3 * (np.exp(lna) * np.exp(lnb) ** x) / x, linestyle=(0, (3, 5, 1, 5, 1, 5)),
+    #          color=blue, label='AC-Exp Fit')
+    ax.plot(1e-3 * x, 1e-3 * (amcp * x ** 2 + bmcp * x + cmcp), '-.', color=blue, label='MC-Poly Fit', zorder=1)
+    # a32.plot(1e-3 * x, 1e-3 * (amce * bmce ** x), '-', color=blue, label='MC-Exp Fit')
+    # a32.set_ylim(max(-0.2, a32.get_ylim()[0]), min(1, a32.get_ylim()[1]))
+
+    axr.plot(ge_x, 1e-6 * tc_y, '*-', color=yellow, markersize=7, label='TC', zorder=0)
+    # axr.plot(1e-3 * ge_x, 1e-6 * tc_y, '-', color=yellow)
+    axr.tick_params(axis='y', labelcolor=yellow)
+
+    ax.set_ylim(max(0, ax.get_ylim()[0]), min(1, ax.get_ylim()[1]))
+    ax_lines, ax_labels = ax.get_legend_handles_labels()
+    axr_lines, axr_labels = axr.get_legend_handles_labels()
+    axr.legend(ax_lines + axr_lines, ax_labels + axr_labels,
+               bbox_to_anchor=(0.5, 0.98), loc='upper center', fontsize=10, ncol=5)
+
+    axb = ax.twiny()
+    axb.xaxis.set_ticks_position("bottom")
+    axb.xaxis.set_label_position("bottom")
+    axb.spines["bottom"].set_position(("axes", -0.15))
+    axb.set_frame_on(True)
+    axb.patch.set_visible(False)
+    axb.spines[:].set_visible(False)
+    axb.spines['bottom'].set_visible(True)
+    tick_vals = ax.get_xticks()
+    axb.set_xticks(tick_vals)
+    axb.set_xticklabels([str(int(round(100 * x / (1e-3 * df['baseline_annual_emissions_tonco2'].max()))))
+                         for x in tick_vals])
+    axb.set_xlabel('\% Emissions Reduction')
+    axr.grid(False)
+    axb.grid(False)
+
+    caption = 'Scenario: ' + get_val_from_code(scenario_code, 'rr') + ', ' + \
+              get_val_from_code(scenario_code, 'fuel_type') + ', ' + \
+              get_val_from_code(scenario_code, 'D') + ' km, ' + \
+              'reroute=' + get_val_from_code(scenario_code, 'reroute') + ', ' + \
+              'switch=' + get_val_from_code(scenario_code, 'switch_tech')
+    if int(get_val_from_code(scenario_code, 'reroute')):
+        caption += ', ' + get_val_from_code(scenario_code, 'max_reroute_inc').replace('X', '') + '\% reroute threshold'
+
+    ax.text(0.5, -0.4, caption, ha='center', transform=ax.transAxes)
+    fig.tight_layout()
+    fig.subplots_adjust(bottom=0.3)
     plt.savefig(os.path.join(DEP_TAB_O_DIR, 'Figures', scenario_code + 'diff_AC_MC.png'), dpi=300, format='png')
     if figshow:
         plt.show()
