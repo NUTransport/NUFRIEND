@@ -1,16 +1,8 @@
-import time
-
-import networkx as nx
-import numpy as np
-import pandas as pd
-
 from util import *
 # MODULES
-from helper import splc_to_node, datetime_to_mmddyyyy, mmddyyyy_to_datetime, node_to_edge_path, \
-    load_comm_energy_ratios, load_railroad_comm_ton_car, load_conversion_factors, load_fuel_tech_eff_factor, \
-    load_railroad_values, extract_rr
-from network_representation import plot_graph
-from flow_data_processing import RR_SPLC_comm_grouping, RR_SPLC_comm_date_grouping
+from helper import splc_to_node, node_to_edge_path, \
+    load_comm_energy_ratios, load_conversion_factors, load_fuel_tech_eff_factor, \
+    load_railroad_values, extract_rr, load_flow_data_df_csv, load_flow_data_date_df_csv
 from input_output import load_dict_from_json, dict_to_json
 
 '''
@@ -19,7 +11,6 @@ ROUTING METHODS
 
 
 def route_flows_mp(G: nx.DiGraph, D: float, time_horizon: list, od_flows: dict, fuel_type: str):
-    # TODO: flows actually seem to be for daily values
     edge_list = list(G.edges)
     edge_list.extend([(v, u) for u, v in edge_list])  # both directions
     od_list = list(od_flows.keys())
@@ -42,7 +33,7 @@ def route_flows_mp(G: nx.DiGraph, D: float, time_horizon: list, od_flows: dict, 
     rr_v = load_railroad_values().loc[rr]  # railroad energy intensity statistics
     cf = load_conversion_factors()['Value']  # numerical constants for conversion across units
     # arrays ordered in same order as <comm_list> and stored as np arrays for vectorization
-    rr_tc = load_railroad_comm_ton_car().loc[rr]  # tons/car by commodity for rr (indexed by <comm_group>)
+    rr_tc = rr_v['ton/car']  # tons/car
     comm_er = load_comm_energy_ratios()['Weighted ratio']  # commodity energy ratios (indexed by <comm_group>)
     # car2loc = loc/train * train/car- not adjusted by commodity
     car2loc = rr_v['loc/train'] * (1 / rr_v['car/train'])
@@ -102,12 +93,12 @@ def route_flows_mp(G: nx.DiGraph, D: float, time_horizon: list, od_flows: dict, 
                 # Baseline:
                 G.edges[e]['baseline_avg_ton'][t][c] = e_ton
                 # loc = loc/car * <commodity_car/ton> * ton
-                G.edges[e]['baseline_avg_loc'][t][c] = np.ceil(car2loc * (1 / rr_tc.loc[c]) * e_ton)
+                G.edges[e]['baseline_avg_loc'][t][c] = np.ceil(car2loc * (1 / rr_tc) * e_ton)
                 # gal = gal/ton-mi * <commodity_factor> * ton-mi
                 G.edges[e]['baseline_avg_gal'][t][c] = tonmi2gal * comm_er.loc[c] * e_ton * mi
                 # incrementally sum all comm_groups up to get values for 'TOTAL'
                 G.edges[e]['baseline_avg_ton'][t]['TOTAL'] += e_ton
-                G.edges[e]['baseline_avg_loc'][t]['TOTAL'] += np.ceil(car2loc * (1 / rr_tc.loc[c]) * e_ton)
+                G.edges[e]['baseline_avg_loc'][t]['TOTAL'] += np.ceil(car2loc * (1 / rr_tc) * e_ton)
                 G.edges[e]['baseline_avg_gal'][t]['TOTAL'] += tonmi2gal * comm_er.loc[c] * e_ton * mi
                 # ----------
                 # Alt. Tech.
@@ -138,12 +129,12 @@ def route_flows_mp(G: nx.DiGraph, D: float, time_horizon: list, od_flows: dict, 
                 e_ton_sd = edge_tons_sd[e_idx]
                 G.edges[e]['support_diesel_avg_ton'][t][c] = e_ton_sd
                 # loc = loc/car * <commodity_car/ton> * ton
-                G.edges[e]['support_diesel_avg_loc'][t][c] = np.ceil(car2loc * (1 / rr_tc.loc[c]) * e_ton_sd)
+                G.edges[e]['support_diesel_avg_loc'][t][c] = np.ceil(car2loc * (1 / rr_tc) * e_ton_sd)
                 # gal = gal/ton-mi * <commodity_factor> * ton-mi
                 G.edges[e]['support_diesel_avg_gal'][t][c] = tonmi2gal * comm_er.loc[c] * e_ton_sd * mi
                 # incrementally sum all comm_groups up to get values for 'TOTAL'
                 G.edges[e]['support_diesel_avg_ton'][t]['TOTAL'] += e_ton_sd
-                G.edges[e]['support_diesel_avg_loc'][t]['TOTAL'] += np.ceil(car2loc * (1 / rr_tc.loc[c]) * e_ton_sd)
+                G.edges[e]['support_diesel_avg_loc'][t]['TOTAL'] += np.ceil(car2loc * (1 / rr_tc) * e_ton_sd)
                 G.edges[e]['support_diesel_avg_gal'][t]['TOTAL'] += tonmi2gal * comm_er.loc[c] * e_ton_sd * mi
         print('\t EDGE ASSIGNMENT {v0}:: {v1} seconds'.format(v0=t, v1=time.time() - t1))
 
@@ -202,7 +193,6 @@ def route_flows_mp(G: nx.DiGraph, D: float, time_horizon: list, od_flows: dict, 
 
 
 def path_link_incidence_mat_mp(G: nx.DiGraph, od_list: list, edge_list: list):
-    # TODO: see notes on generating
     # od_flows is time-indexed as well now; want union of all ods with >0 flow
     # od_list = list(od_flows.keys())
 
@@ -254,6 +244,7 @@ def ods_by_perc_ton_mi(G: nx.DiGraph, perc_ods: float, CCWS_filename: str = None
     # load dict that maps SPLC codes to node_ids in G
     splc_node_dict = splc_to_node(G)
     # load grouped OD flow data
+    # TODO: fix to be for time-dependent data
     flow_df = RR_SPLC_comm_grouping(filename=CCWS_filename, time_window=time_window)
     # filter out specific railroad
     rr = G.graph['railroad']
@@ -492,7 +483,6 @@ def ods_ton_comm_forecast(G: nx.DiGraph, od_list: list):
                                                                                     (splc_node_dict[x[1:7]],
                                                                                      splc_node_dict[x[7:]]))
 
-    # TODO: take in time_horizon here instead?
     years = ['', '2020 ', '2023 ', '2025 ', '2030 ', '2035 ', '2040 ', '2045 ', '2050 ']
     cols_to_keep = [y + 'Expanded Tons' for y in years]
     flow_df['Origin-Destination nodeid comb'] = flow_df['Origin-Destination nodeid'].apply(lambda x: x[0] + x[1])

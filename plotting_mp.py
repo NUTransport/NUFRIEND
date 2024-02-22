@@ -247,7 +247,6 @@ def plot_edges(edges_gdf, time_idx, time_horizon, color=None, incremental=False)
         lons = np.append(lons, None)
         names = np.append(names, None)
 
-    # TODO: can multiple line thicknesses be used here?
     g = go.Scattergeo(
         lon=lons,
         lat=lats,
@@ -416,7 +415,6 @@ def plot_covered_nodes(nodes_gdf, time_idx, time_horizon, color=None, incrementa
     return g
 
 
-# TODO: can we show dynamic barplots showing (1) emissions reduction and (2) LCO breakdown?
 def plot_facility_location_summary_table(G: nx.DiGraph, time_step, max_flow=False):
     # plot table of summary of results for battery
 

@@ -1,17 +1,15 @@
 from util import *
 # MODULES
-from helper import elec_rate_state
-from input_output import load_cached_graph, write_scenario_df, load_scenario_df, cache_graph, \
-    codify_scenario_output_file, cache_exists, get_val_from_code
 from network_representation import load_simplified_consolidated_graph
 from facility_rollout_mp import facility_location_mp
 from facility_sizing_mp import facility_sizing_mp
-from tea_mp import tea_dropin_mp, tea_hydrogen_all_facilities, tea_battery_mp, tea_diesel_mp
+from tea_mp import tea_battery_mp, tea_diesel_mp
 from lca_mp import lca_battery_mp, lca_diesel_mp
 from routing_mp import ods_by_perc_ton_mi, ods_by_perc_ton_mi_forecast, route_flows_mp
-from plotting_mp import *
+from plotting_mp import plot_battery_facility_location
 
 
+# TODO: set up to match the wat run is called for a given scenario, using an input csv file
 def run_rollout(rr: str, fuel_type: str, D: float, time_horizon: list, facility_costs: dict = None,
                 max_flow=False, greedy=False, flow_mins: float = None, budgets: list = None,
                 candidate_facilities: list = None, discount_rates: any = None, num_shortest_paths: int = 1,
@@ -49,7 +47,6 @@ def run_rollout(rr: str, fuel_type: str, D: float, time_horizon: list, facility_
 
         t0 = time.time()
         # 2. locate facilities and extract graph form of this, G, and its induced subgraph, H
-        # TODO: do we want H or Hs (dict for all time_horizon steps)?
         G = facility_location_mp(G, D=D, time_horizon=time_horizon, od_flows=od_flows, facility_costs=facility_costs,
                                  max_flow=max_flow, greedy=greedy, flow_mins=flow_mins, budgets=budgets,
                                  candidate_facilities=candidate_facilities, discount_rates=discount_rates,
@@ -89,11 +86,8 @@ def run_rollout(rr: str, fuel_type: str, D: float, time_horizon: list, facility_
             print('TEA:: {v0} seconds ---'.format(v0=round(time.time() - t0, 3)))
 
             # update stats
-            # TODO: something off with emissions calculations (diesel is lower than battery scenarios),
-            #  also, the deployment_perc calculations are way off from the flow capture objective values from facility loc.
             G = operations_stats_mp(G=G, time_horizon=time_horizon)
 
-        # TODO: plotting (show over time) plotly slider function or slideshow capability?
         t0 = time.time()
         if plot:
             fig = plot_battery_facility_location(G, time_horizon=time_horizon, additional_plots=True, nested=nested,

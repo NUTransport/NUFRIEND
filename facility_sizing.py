@@ -1,5 +1,3 @@
-import numpy as np
-
 from util import *
 from helper import gurobi_suppress_output, load_conversion_factors, \
     load_fuel_tech_eff_factor, load_railroad_values, elec_rate_state
@@ -15,10 +13,6 @@ FACILITY SIZING:
     - can include nodes in these that are not selected by setting recharge costs at them to be infinite
 
 '''
-
-RAIL_DATA_DIR = '/Users/maxng/Library/CloudStorage/OneDrive-NorthwesternUniversity/ARPA-E LOCOMOTIVES/Rail Data'
-KM2MI = 0.62137119  # [mi/km]
-
 
 '''
 GRAPH PREPROCESSING

@@ -35,8 +35,6 @@ def facility_location_mp(G: nx.DiGraph, D: float, time_horizon: list, od_flows: 
     # 2. locate facilities and extract graph form of this
     # (for now, looking at all pairs paths b/w terminals 'T', can update based on flow routing information)
 
-    # TODO: add in deviation cycles formulations here (using non-redundant cycles only)
-
     if max_flow:
         if greedy:
             G, y_val, _ = greedy_max_flow_facility_cycle(G=G, D=D, time_horizon=time_horizon, od_flows=od_flows,
@@ -227,9 +225,6 @@ def max_flow_facility_cycle_mp_ilp(G: nx.Graph, D: float, time_horizon: list, od
     cycle_adj_mat_list = cycle_adjacency_matrix_mp(G, paths, D, od_flow_perc)
     print('CYCLE ADJACENCY MATRIX:: ' + str(time.time() - t0))
 
-    # TODO: could the issue be here in that flows are double counted (both directions), see what is going on?
-    #  check source data for total ton-mileage avaialble and compare, ods_comm_ton method
-
     paths = dict()  # for storing new paths (nodeids) indexed by (o, d)
     path_dists = dict()  # for storing path distances (in miles)
     path_flows = dict()  # for storing path_flows
@@ -269,7 +264,6 @@ def max_flow_facility_cycle_mp_ilp(G: nx.Graph, D: float, time_horizon: list, od
         z = m.addVars(od_vars, obj=od_fs, lb=0, ub=1, name=[str(k) for k in od_vars])
 
     # add objective fxn
-    # TODO: is this counting both ways? i.e., does cycle_adj_mat_list feature both directions? i.e., (o, d) and (d, o)
     m.setObjective(gp.quicksum(discount_rates[t] * gp.quicksum(z[od, t] * path_flows[od, t]
                                                                for od in ods if (od, t) in od_vars)
                                for t in time_horizon), GRB.MAXIMIZE)
@@ -484,7 +478,6 @@ def min_cost_facility_cycle_mp_ilp(G: nx.Graph, D: float, time_horizon: list, od
         z = m.addVars(od_vars, obj=0, lb=0, ub=1, name=[str(k) for k in od_vars])
 
     # add objective fxn
-    # TODO: is this counting both ways? i.e., does cycle_adj_mat_list feature both directions? i.e., (o, d) and (d, o)
     m.setObjective(gp.quicksum(discount_rates[t] * gp.quicksum(y[j, t] * facility_costs[j, t]
                                                                for j in node_list if (j, t) in fac_vars)
                                for t in time_horizon), GRB.MINIMIZE)
@@ -624,8 +617,6 @@ def greedy_max_flow_facility_cycle(G: nx.Graph, D: float, time_horizon: list, od
     :return:
     """
 
-    # TODO: fix in the style of Chung and Kwon
-
     [od_flows, candidate_facilities, budgets,
      facility_costs, discount_rates] = input_cleaning(G=G, time_horizon=time_horizon, od_flows=od_flows,
                                                       candidate_facilities=candidate_facilities,
@@ -741,8 +732,6 @@ def greedy_max_flow_facility_cycle(G: nx.Graph, D: float, time_horizon: list, od
 
     # path_nodeids = [p.index for p, _, _, _ in cycle_adj_mat_list]
 
-    # TODO: feed <selected_facilities>, <obj> to <greedy_to_ilp_plotting> to construct the staged solution
-    #  to match the timesteps for ILP version, and compute the cumulative (and stepwise) ton-mile capture
     G, y_val, obj_val = greedy_to_ilp_plotting(G=G, D=D, time_horizon=time_horizon, od_flows=od_flows,
                                                obj=obj, selected_facilities=selected_facilities,
                                                candidate_facilities=candidate_facilities, budgets=budgets,
@@ -795,8 +784,6 @@ def cycle_adjacency_matrix_mp(G: nx.Graph, paths: list, D: float, od_flow_perc: 
     #   ii)     a^0_ij (d_{i,path[0]} + d_{path[0],j} <= D),
     #   iii)    a^n_ij (d_{i,path[-1]} + d_{path[-1],j} <= D)
 
-    # TODO: consider streamlining via matrix form
-
     mat_filepath = os.path.join(NX_DIR, G.graph['railroad'] + '_' + str(D) + '_' + str(od_flow_perc) +
                                 '_p2p_adjacency_mat_mp.pkl')
     if os.path.exists(mat_filepath):
@@ -834,7 +821,6 @@ def cycle_adjacency_matrix_mp(G: nx.Graph, paths: list, D: float, od_flow_perc: 
     for k in range(len(feasible_paths)):
         p = feasible_paths[k]
         if (p[0], p[-1]) not in covered_ods:
-            # TODO: do we include the reverse of OD?
             # if OD of this path not yet served
             covered_ods.add((p[0], p[-1]))
         else:

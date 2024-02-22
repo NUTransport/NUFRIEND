@@ -7,7 +7,6 @@ Imports all required packages and sets global variables for file directories.
 
 # GENERAL
 import os
-import os.path
 import math
 import warnings
 import pandas as pd
@@ -43,19 +42,6 @@ import plotly.graph_objs
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
-from plotly.offline import iplot
-import logging
-# DASH
-from dash import dash, dcc, html, Input, Output, State
-from flask import request, jsonify
-import dash_bootstrap_components as dbc
-from dash_bootstrap_templates import load_figure_template
-from flask_caching import Cache
-import dash_loading_spinners as dls
-import csv
-import dash_auth
-import traceback
-from werkzeug.middleware.proxy_fix import ProxyFix # for nginx
 
 warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
 
@@ -67,6 +53,10 @@ tqdm.pandas()
 # TODO: for publicly released version:
 #  - have local directories for key input data; store template files in these as well as sample data files for example
 #  - create example/test files and sample results so that users can run and compare on their computer
+#       - allow scenario code to be a name that is provided by user, otherwise, generate;
+#         name all relevant input/output files with the provided/generated name
+#  - module documentation; deocumentation (at top) for key methods
+#  - remove large, old commented out code blocks
 
 # GLOBAL PATHS
 BASE_DIR = os.path.dirname(__file__)
@@ -81,8 +71,6 @@ NX_DIR = os.path.join(INPUT_DIR, 'networks')
 TEA_DIR = os.path.join(INPUT_DIR, 'TEA')
 RR_DIR = os.path.join(INPUT_DIR, 'railroad')
 SCENARIO_DIR = os.path.join(INPUT_DIR, 'scenario')
-# TODO: remove these, do not use caching or deployment tables
-DEP_TAB_DIR = os.path.join(INPUT_DIR, 'general')
 # output directory
 OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
 # output subdirectories
@@ -90,8 +78,6 @@ FIG_DIR = os.path.join(OUTPUT_DIR, 'figures')
 MET_O_DIR = os.path.join(OUTPUT_DIR, 'metrics')
 NODE_O_DIR = os.path.join(OUTPUT_DIR, 'nodes')
 EDGE_O_DIR = os.path.join(OUTPUT_DIR, 'edges')
-# TODO: remove
-DEP_TAB_O_DIR = os.path.join(OUTPUT_DIR, 'Deployment')
 
 
 # GLOBAL VARS

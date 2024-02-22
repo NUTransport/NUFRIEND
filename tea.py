@@ -1,9 +1,6 @@
-import networkx as nx
-import numpy as np
-
+from util import *
 from helper import load_fuel_tech_eff_factor, load_conversion_factors, load_railroad_values, \
     load_tea_battery_lookup, load_tea_hydrogen_lookup, elec_rate_state
-from util import *
 
 '''
 BATTERY
@@ -83,7 +80,6 @@ def tea_battery(peak_loc: float, avg_loc: float, avg_mwh: float, elec_rate: floa
                   'Total charging cost [$/kWh]', 'Charging station capital investment',
                   'Annual O&M cost (w/energy cost)']
     df_lookup = df.groupby(by=['Number of Locomotive', 'Locomotive per charger']).first().loc[(avg_loc, slice(None))]
-    # TODO: verify this interpolation makes sense and is like the one for H2
     if actual_loco_p_charger <= min(locos_p_charger):
         # use min util
         lookup_locos = min(locos_p_charger)
@@ -761,8 +757,6 @@ def tea_hydrogen(peak_loc: float, avg_loc: float, avg_kgh2: float, max_util: flo
     Calculates the breakdown of LCO into capital, O&M, and energy costs as well as the capital investment,
     annual O&M + energy cost, and actual average utilization and number of chargers for a battery charging facility
     of given throughput and size based on <peak_loc>, <max_util>, and <avg_loc>.
-
-    TODO: fix this/ trim down
 
     # perform interpolation of results for a facility of given <peak_loc>, <max_util>, and <avg_loc> and
     # return the breakdown of LCO into: capital, O&M, and energy

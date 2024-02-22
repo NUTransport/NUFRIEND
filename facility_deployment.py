@@ -1,11 +1,7 @@
-import datetime
-import time
-
 from util import *
 # MODULES
 from helper import od_pairs, shortest_path, gurobi_suppress_output, node_to_edge_path
 from network_representation import remove_from_graph
-from input_output import load_dict_from_json, dict_to_json
 
 sns.set_palette('colorblind', n_colors=4)
 
@@ -14,8 +10,7 @@ ILP SOLVER
 '''
 
 
-def facility_network_cycle_ilp(G: nx.Graph, D: float, paths: list, od_flows: dict, binary_prog=False,
-                               suppress_output=True):
+def facility_network_cycle_ilp(G: nx.Graph, D: float, paths: list, od_flows: dict, suppress_output=True):
     """
     Solve and plot solution for path constrained facility location problem
 
@@ -46,12 +41,7 @@ def facility_network_cycle_ilp(G: nx.Graph, D: float, paths: list, od_flows: dic
     m = gp.Model('Facility Network Problem', env=gurobi_suppress_output(suppress_output))
     # add new variables - for facility location
     # n many variables; 0 <= x_i <= 1 for all i; if binary==True, will be solved as integer program
-    if binary_prog:
-        # x = m.addVars(n, vtype=GRB.BINARY, name='x')
-        x = m.addVars(node_list, obj=1, vtype=GRB.BINARY, name=[str(n) for n in node_list])
-    else:
-        # x = m.addVars(n, lb=0, ub=1, name='x')
-        x = m.addVars(node_list, obj=1, lb=0, ub=1, name=node_list)
+    x = m.addVars(node_list, obj=1, vtype=GRB.BINARY, name=[str(n) for n in node_list])
     # add objective fxn
     # m.setObjective(gp.quicksum(x[i] for i in node_list), GRB.MINIMIZE)
 
@@ -112,7 +102,7 @@ def facility_network_cycle_ilp(G: nx.Graph, D: float, paths: list, od_flows: dic
 
 
 def facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: list, od_flows: dict, flow_min: float,
-                                      binary_prog=False, suppress_output=False):
+                                      suppress_output=False):
     """
     Solve and plot solution for path constrained facility location problem
 
@@ -145,20 +135,15 @@ def facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: list, od_flo
     m = gp.Model('Facility Network Problem', env=gurobi_suppress_output(suppress_output))
     # add new variables - for facility location
     # n many variables; 0 <= x_i <= 1 for all i; if binary==True, will be solved as integer program
-    if binary_prog:
-        x = m.addVars(node_list, obj=1, vtype=GRB.BINARY, name=[str(n) for n in node_list])
-        z = m.addVars([k for k in range(len(cycle_adj_mat_list))], obj=0, lb=0, ub=1,
-                      name=[str(k) for k in range(len(cycle_adj_mat_list))])
-    else:
-        x = m.addVars(node_list, obj=1, lb=0, ub=1, name=node_list)
-        z = m.addVars([k for k in range(len(cycle_adj_mat_list))], obj=0, lb=0, ub=1,
-                      name=[str(k) for k in range(len(cycle_adj_mat_list))])
+    x = m.addVars(node_list, obj=1, vtype=GRB.BINARY, name=[str(n) for n in node_list])
+    z = m.addVars([k for k in range(len(cycle_adj_mat_list))], obj=0, lb=0, ub=1,
+                  name=[str(k) for k in range(len(cycle_adj_mat_list))])
 
     # add objective fxn
     # m.setObjective(gp.quicksum(x[i] for i in node_list), GRB.MINIMIZE)
     # add path coverage constraints
 
-    print('Total OD flow:: %.0f' % sum(od_flows.values()))
+    # print('Total OD flow:: %.0f' % sum(od_flows.values()))
 
     path_flows = []     # for storing path_flows
     ods_connected = set()
@@ -224,7 +209,7 @@ def facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: list, od_flo
     # print('Ton-miles captured:: %s' % sum(path_flows[k] * zz_val[k][1] for k in range(len(cycle_adj_mat_list))))
     # print('Percentage ton-miles captured:: %s' % (tm_capt / sum(od_flows.values())))
     # print([path_info[k] for k in range(len(cycle_adj_mat_list)) if zz_val[k][1] == 1])
-    path_nodeids = [list(p.index) for p, _, _, _ in cycle_adj_mat_list]
+    path_nodeids = [p.index.to_list() for p, _, _, _ in cycle_adj_mat_list]
 
     G.graph['framework'] = dict(
         ods=[(path_nodeids[k][0], path_nodeids[k][-1]) for k in range(len(path_nodeids)) if zz_val[k][1]],
@@ -232,14 +217,14 @@ def facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: list, od_flo
         path_edges=[node_to_edge_path(path_nodeids[k]) for k in range(len(path_nodeids)) if zz_val[k][1]],
         tm_capt_perc=tm_capt / sum(od_flows.values()),
         tm_capt=tm_capt,
-        od_flows=od_flows,
+        # od_flows=od_flows,
     )
 
     return x_val, z_val, tm_capt, G
 
 
 def max_flow_facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: list, od_flows: dict, budget: float=None,
-                                               binary_prog=False, suppress_output=False):
+                                               suppress_output=False):
     """
     Solve and plot solution for path constrained facility location problem
 
@@ -313,24 +298,17 @@ def max_flow_facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: lis
         # extract path flow along path <p> based on <od_flows> and specific path O-D pair (<o>, <n>)
         path_flows.append(od_flows[o, n] if (o, n) in od_flows.keys() else 0)
 
-    print('Total OD flow:: %.0f' % sum(od_flows.values()))
+    # print('Total OD flow:: %.0f' % sum(od_flows.values()))
 
     # set up model
     m = gp.Model('Facility Network Problem', env=gurobi_suppress_output(suppress_output))
     # add new variables - for facility location
     # n many variables; 0 <= x_i <= 1 for all i; if binary==True, will be solved as integer program
-    if binary_prog:
-        x = m.addVars(node_list, obj=0, vtype=GRB.BINARY, name=[str(n) for n in node_list])
-        z = m.addVars([k for k in range(len(cycle_adj_mat_list))], obj=path_flows, lb=0, ub=1,
-                      name=['z' + str(k) for k in range(len(cycle_adj_mat_list))])
-    else:
-        x = m.addVars(node_list, obj=0, lb=0, ub=1, name=node_list)
-        z = m.addVars([k for k in range(len(cycle_adj_mat_list))], obj=path_flows, lb=0, ub=1,
-                      name=['z' + str(k) for k in range(len(cycle_adj_mat_list))])
+    x = m.addVars(node_list, obj=0, vtype=GRB.BINARY, name=[str(n) for n in node_list])
+    z = m.addVars([k for k in range(len(cycle_adj_mat_list))], obj=path_flows, lb=0, ub=1,
+                  name=['z' + str(k) for k in range(len(cycle_adj_mat_list))])
 
     # add objective fxn
-    # TODO: is this counting both ways? i.e., does cycle_adj_mat_list feature both directions?
-    #  are there multiple paths per OD featured?
     m.setObjective(gp.quicksum(z[k] * path_flows[k] for k in range(len(cycle_adj_mat_list))), GRB.MAXIMIZE)
     # add path coverage constraints
 
@@ -399,7 +377,7 @@ def max_flow_facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: lis
     # print('Ton-miles captured:: %s' % z_val)
     # print('Percentage ton-miles captured:: %s' % (z_val / sum(od_flows.values())))
 
-    path_nodeids = [p.index for p, _, _, _ in cycle_adj_mat_list]
+    path_nodeids = [p.index.to_list() for p, _, _, _ in cycle_adj_mat_list]
     if 'framework' in G.graph.keys():
         G.graph['framework'] = dict(
             ods=[(path_nodeids[k][0], path_nodeids[k][-1]) for k in range(len(path_nodeids)) if zz_val[k][1]],
@@ -407,964 +385,17 @@ def max_flow_facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: lis
             path_edges=[node_to_edge_path(path_nodeids[k]) for k in range(len(path_nodeids)) if zz_val[k][1]],
             tm_capt_perc=z_val / sum(od_flows.values()),
             tm_capt=z_val,
-            od_flows=od_flows,
+            # od_flows=od_flows,
             path_flows=path_flows,
             z=zz_val,
             x=x_val,
-            c=cycle_adj_mat_list,
+            # c=cycle_adj_mat_list,
             p=paths
         )
 
-    return x_val, z_val
+    return x_val, z_val, G
 
 
-def facility_deviation_paths_select(G: nx.Graph, D: float, ods: list, od_flows: dict, flow_min: float,
-                                    od_flow_perc: float = 1,
-                                    binary_prog=False, suppress_output=True):
-    """
-    Solve and plot solution for path constrained facility location problem
-
-    For infeasible stretches
-    -Can facility set to be priority set nodes and include all 'Other' type nodes as clients in the future
-    -Find shortest path from all priority set nodes to ALL nodes (priority set + 'Other') using nx.multi_source_dijkstra
-    -Only allow facilities to be placed at priority set nodes and allow for additional variables z_j to mark infeasible
-        locations for each of the 'Other' nodes not satisfied.
-    :param tolerance:
-    :param rr:
-    :param all_pairs:
-    :param intertypes:
-    :param D: [float] range in km
-    :param binary_prog:
-    :param path_cnstrs_only:
-    :param plot:
-    :param plot_paths: for plotting only paths
-    :param origin:
-    :return:
-    """
-
-    node_list = list(G.nodes())
-    # adjacency matrix based on all pairs shortest path distances
-    # extract path-based adjacency matrices for each shortest path from paths_od to apply to model constraints
-    t0 = time.time()
-    cycle_adj_mat_dict, deviation_paths = cycle_deviation_adjacency_matrix(G=G, ods=ods, od_flows=od_flows, D=D,
-                                                                           od_flow_perc=od_flow_perc)
-    print('CYCLE ADJACENCY MATRIX:: ' + str(time.time() - t0))
-
-    # keep_ods = {('S28049000893', 'S48439001761'), ('S28049000893', 'S48113001906'),
-    #             ('S48439001761', 'S28049000893'), ('S48113001906', 'S28049000893')}
-    # od_flows_comb = {k: od_flows[o, d] + od_flows[d, o] for k, (o, d) in zip(range(len(od_list)), od_list)}
-    # od_flows['S28049000893', 'S48113001906'] = 1000
-    # od_flows['S48113001906', 'S28049000893'] = 1000
-
-    od_flows_keys = list(od_flows.keys())
-    for o, d in od_flows_keys:
-        if (d, o) not in od_flows.keys():
-            od_flows[d, o] = 0
-
-    od_list = []
-    od_deviation_path_pairs = []
-    do_deviation_path_pairs = []
-    for o, d in deviation_paths:
-        if (o, d) not in od_flows.keys():
-            od_flows[o, d] = 0
-            od_flows[d, o] = 0
-        if od_flows[o, d] > 0 or od_flows[d, o] > 0:
-            if (o, d) not in od_list and (d, o) not in od_list:
-                od_list.append((o, d))
-                od_deviation_path_pairs.extend([(len(od_list) - 1, p) for p in range(len(deviation_paths[o, d]))])
-                do_deviation_path_pairs.extend([(len(od_list) - 1, p) for p in range(len(deviation_paths[d, o]))])
-
-    print('Total OD flow:: %.0f' % sum(od_flows.values()))
-
-    od_flows_comb = {k: od_flows[o, d] + od_flows[d, o] for k, (o, d) in zip(range(len(od_list)), od_list)}
-
-    # set up model
-    m = gp.Model('Facility Network Problem', env=gurobi_suppress_output(suppress_output))
-    # add new variables - for facility location
-    # n many variables; 0 <= x_i <= 1 for all i; if binary==True, will be solved as integer program
-    if binary_prog:
-        x = m.addVars(node_list, obj=1, vtype=GRB.BINARY, name=[str(n) for n in node_list])
-        z = m.addVars(od_deviation_path_pairs, obj=0, vtype=GRB.BINARY, name=[str(k) for k in od_deviation_path_pairs])
-        w = m.addVars(do_deviation_path_pairs, obj=0, vtype=GRB.BINARY, name=[str(k) for k in do_deviation_path_pairs])
-        # z = m.addVars(od_deviation_path_pairs, obj=0, lb=0, ub=1, name=[str(k) for k in od_deviation_path_pairs])
-    else:
-        x = m.addVars(node_list, obj=1, vtype=GRB.BINARY, name=[str(n) for n in node_list])
-        z = m.addVars(od_deviation_path_pairs, obj=0, lb=0, name=[str(k) for k in od_deviation_path_pairs])
-        w = m.addVars(do_deviation_path_pairs, obj=0, lb=0, name=[str(k) for k in do_deviation_path_pairs])
-
-    # add objective fxn
-    # m.setObjective(gp.quicksum(x[i] for i in node_list), GRB.MINIMIZE)
-    # add path coverage constraints
-
-    for k in range(len(od_list)):
-        o, d = od_list[k]
-
-        # can only capture up to 100% of flows for O-D pair (o, d) along all possible paths pi connecting (o, d)
-        m.addConstr(gp.quicksum(z[k, pi] for pi in range(len(deviation_paths[o, d]))) <= 1)
-        m.addConstr(gp.quicksum(w[k, pi] for pi in range(len(deviation_paths[d, o]))) <= 1)
-        m.addConstr(gp.quicksum(z[k, pi] for pi in range(len(deviation_paths[o, d]))) <=
-                    gp.quicksum(w[k, pi] for pi in range(len(deviation_paths[d, o]))))
-
-        # A contains list of the 3 adjacency matrices for all possible return paths for all possible outbound paths
-        # i.e. A = [outbound1[return1[a1,a2,a3], ..., returnk[a1,a2,a3]], ...,
-        #           outboundl[return1[a1,a2,a3],...,returnk[a1,a2,a3]]]
-        # note k = l for this case as the outbound and return paths are each other's reversed set
-        a = cycle_adj_mat_dict[o, d]
-        for phi_idx in range(len(deviation_paths[o, d])):
-            phi = deviation_paths[o, d][phi_idx]
-            # a_phi = a[phi_idx][the_idx][0]
-            for i_idx in range(len(phi)-1):
-                i = phi[i_idx]
-                # redundant cycles
-                m.addConstr((gp.quicksum(a[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                             gp.quicksum(
-                                 gp.quicksum(a[phi_idx][the_idx][1].loc[i, j] * x[j] for j in phi[1:i_idx + 1]) +
-                                 gp.quicksum(a[phi_idx][the_idx][2].loc[i, j] * x[j]
-                                             for j in deviation_paths[d, o][the_idx])
-                                 for the_idx in range(len(deviation_paths[d, o])))) >= z[k, phi_idx])
-                # # non-redundant cycles
-                # m.addConstr((gp.quicksum(a[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                #              gp.quicksum(gp.quicksum(a[phi_idx][0][1].loc[i, j] * x[j] for j in phi[1:i_idx + 1]) +
-                #                          gp.quicksum(a[phi_idx][0][2].loc[i, j] * x[j]
-                #                                      for j in deviation_paths[d, o][phi_idx]))) >= z[k, phi_idx])
-        # reverse
-        b = cycle_adj_mat_dict[d, o]
-        for phi_idx in range(len(deviation_paths[d, o])):
-            phi = deviation_paths[d, o][phi_idx]
-            for i_idx in range(len(phi)-1):
-                i = phi[i_idx]
-                # redundant cycles
-                m.addConstr((gp.quicksum(b[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                             gp.quicksum(
-                                 gp.quicksum(b[phi_idx][the_idx][1].loc[i, j] * x[j] for j in phi[1:i_idx + 1]) +
-                                 gp.quicksum(b[phi_idx][the_idx][2].loc[i, j] * x[j]
-                                             for j in deviation_paths[d, o][the_idx])
-                                 for the_idx in range(len(deviation_paths[d, o])))) >= w[k, phi_idx])
-                # # non-redundant cycles
-                # m.addConstr((gp.quicksum(b[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                #              gp.quicksum(gp.quicksum(b[phi_idx][0][1].loc[i, j] * x[j] for j in phi[1:i_idx + 1]) +
-                #                          gp.quicksum(b[phi_idx][0][2].loc[i, j] * x[j]
-                #                                      for j in deviation_paths[d, o][phi_idx]))) >= w[k, phi_idx])
-
-    # for o, d in od_list:
-    #     if (o, d) not in keep_ods and (d, o) not in keep_ods:
-    #         od_flows_comb[o, d] = 0
-    #         od_flows_comb[d, o] = 0
-    # only sum those for one-way O-D flows (not round-trip, i.e., if i->j included, do not necessarily add flow of j->i)
-    tm_min = flow_min * sum(od_flows_comb.values())
-    m.addConstr(gp.quicksum(od_flows_comb[k] *
-                            gp.quicksum(z[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]])))
-                            for k in range(len(od_list))) >= tm_min, name='coverage')
-    # m.write('/Users/adrianhz/Desktop/KCS_test_ILP.lp')
-    # optimize
-    m.update()
-    m.optimize()
-    # print(m.display())
-    # extract solution values
-    x_val = m.getAttr('x', x).items()  # get facility placement values
-    z_val = m.getAttr('x', z).items()
-    w_val = m.getAttr('x', w).items()
-    obj_val = m.objval  # get objective fxn value
-
-    z_val = {i: v for i, v in z_val}
-    w_val = {i: v for i, v in w_val}
-    # print('# Facilities:: %s' % sum(v for _, v in x_val))
-    tm_capt = sum(od_flows_comb[k] * sum(z_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]])))
-                  for k in range(len(od_list)))
-    tm_capt_sanity = sum(od_flows[o, d] * sum(z_val[k, phi_idx] for phi_idx in range(len(deviation_paths[o, d]))) +
-                         od_flows[d, o] * sum(w_val[k, phi_idx] for phi_idx in range(len(deviation_paths[d, o])))
-                         for (o, d), k in zip(od_list, range(len(od_list))))
-    # print('Ton-miles captured:: %s' % tm_capt)
-    # print('Percentage ton-miles captured:: %s' % (tm_capt / sum(od_flows.values())))
-    # print('Total OD flows:: %s' % str(sum(od_flows.values())))
-
-    epsilon = 0.0001
-    # epsilon = 0
-    super_path_nodes = dict()
-    subpath_nodes = dict()
-    super_path_edges = dict()
-    subpath_edges = dict()
-    for k in range(len(od_list)):
-        o, d = od_list[k]
-        for phi_idx in range(len(deviation_paths[o, d])):
-            if z_val[k, phi_idx] >= 1 - epsilon:
-                super_path_nodes[o, d] = deviation_paths[o, d][phi_idx]
-                subpath_nodes[o, d] = shortest_path(G, source=o, target=d, weight='km')
-                super_path_edges[o, d] = node_to_edge_path(deviation_paths[o, d][phi_idx])
-                subpath_edges[o, d] = node_to_edge_path(shortest_path(G, source=o, target=d, weight='km'))
-        for phi_idx in range(len(deviation_paths[d, o])):
-            if w_val[k, phi_idx] >= 1 - epsilon:
-                super_path_nodes[d, o] = deviation_paths[d, o][phi_idx]
-                subpath_nodes[d, o] = shortest_path(G, source=d, target=o, weight='km')
-                super_path_edges[d, o] = node_to_edge_path(deviation_paths[d, o][phi_idx])
-                subpath_edges[d, o] = node_to_edge_path(shortest_path(G, source=d, target=o, weight='km'))
-
-    # path_nodes = []
-    # path_edges = []
-    # for k in range(len(od_list)):
-    #     for phi_idx in range(len(deviation_paths[od_list[k]])):
-    #         if zz_val[k, phi_idx] == 1:
-    #             path_nodes.append(deviation_paths[od_list[k]][phi_idx])
-    #             path_edges.append(node_to_edge_path(deviation_paths[od_list[k]][phi_idx]))
-
-    for k, v in z_val.items():
-        if 0 < v < 1 - epsilon:
-            print(k, v)
-    for k, v in w_val.items():
-        if 0 < v < 1 - epsilon:
-            print(k, v)
-
-    G.graph['framework'] = dict(
-        ods=list(set(od_list[k] for k in range(len(od_list))
-                     if sum(z_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]]))) == 1)),
-        path_nodes=super_path_nodes,
-        path_edges=super_path_edges,
-        subpath_nodes=subpath_nodes,
-        subpath_edges=subpath_edges,
-        # path_nodes=[p for p in deviation_paths[od_list[k]] for k in range(len(od_list))
-        #             if sum(zz_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]]))) == 1],
-        # path_edges=[node_to_edge_path(p) for p in deviation_paths[od_list[k]] for k in range(len(od_list))
-        #             if sum(zz_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]]))) == 1],
-        tm_capt_perc=tm_capt / sum(od_flows.values()),
-        tm_capt_perc_sanity=tm_capt_sanity / sum(od_flows.values()),
-        tm_capt=tm_capt,
-        tm_capt_sanity=tm_capt_sanity,
-        od_flows=od_flows,
-        od_flows_comb=od_flows_comb,
-        w_val=w_val,
-        z_val=z_val,
-        deviation_paths=deviation_paths,
-        # od_deviation_path_pairs=od_deviation_path_pairs,
-        # do_deviation_path_pairs=do_deviation_path_pairs,
-        od_list=od_list
-    )
-
-    return x_val, obj_val, tm_capt, G
-
-
-def max_flow_facility_deviation_paths_select(G: nx.Graph, D: float, ods: list, od_flows: dict, budget: float=None,
-                                             od_flow_perc: float = 1,
-                                             binary_prog=False, suppress_output=True):
-    """
-    Solve and plot solution for path constrained facility location problem
-
-    For infeasible stretches
-    -Can facility set to be priority set nodes and include all 'Other' type nodes as clients in the future
-    -Find shortest path from all priority set nodes to ALL nodes (priority set + 'Other') using nx.multi_source_dijkstra
-    -Only allow facilities to be placed at priority set nodes and allow for additional variables z_j to mark infeasible
-        locations for each of the 'Other' nodes not satisfied.
-    :param tolerance:
-    :param rr:
-    :param all_pairs:
-    :param intertypes:
-    :param D: [float] range in km
-    :param binary_prog:
-    :param path_cnstrs_only:
-    :param plot:
-    :param plot_paths: for plotting only paths
-    :param origin:
-    :return:
-    """
-
-    node_list = list(G.nodes())
-    # adjacency matrix based on all pairs shortest path distances
-    # extract path-based adjacency matrices for each shortest path from paths_od to apply to model constraints
-    t0 = time.time()
-    # # START CORRIDOR EXAMPLE - COMMENT OUT
-    # # ['S48113001906', 'S48231001397', 'S48063001511', 'S48343001491', 'S22017000336', 'S22119000236', 'S22065000403']
-    # # [       1,             2,              3,              4,              5,               6,              7      ]
-    # node_id_dict = dict(zip(['S48113001906', 'S48231001397', 'S48063001511', 'S48343001491',
-    #                          'S22017000336', 'S22119000236', 'S22065000403'],
-    #                         [1, 2, 3, 4, 5, 6, 7]))
-    # # od_keys = set((o, d) for o, d in od_flows.keys()).union(set((d, o) for o, d in od_flows.keys()))
-    # # Corridor 1:
-    # # od_flows = {('S48113001906', 'S22065000403'): 100, ('S22119000236', 'S48231001397'): 10,
-    # #             ('S48113001906', 'S22017000336'): 50, ('S48063001511', 'S22017000336'): 5}
-    # # od_flows = {(1, 7): 100, (6, 2): 10, (1, 5): 50, (3, 5): 5}
-    # # Corridor 2:
-    # od_flows = {('S48113001906', 'S22065000403'): 50, ('S22119000236', 'S48231001397'): 10,
-    #             ('S48113001906', 'S22017000336'): 100, ('S48063001511', 'S22017000336'): 5}
-    # # od_flows = {(1, 7): 50, (6, 2): 10, (1, 5): 100, (3, 5): 5}
-    # # od_keys = od_keys.union(set(od_flows_corr.keys()))
-    # # od_flows = {(o, d): od_flows_corr[o, d] if (o, d) in od_flows_corr.keys() else 0 for o, d in od_keys}
-    # ods = [(o, d) for o, d in od_flows.keys() if od_flows[o, d] > 0]
-    # # END CORRIDOR EXAMPLE
-
-    # # START RANDOM EXAMPLE - COMMENT OUT
-    # od_keys = set((o, d) for o, d in od_flows.keys()).union(set((d, o) for o, d in od_flows.keys()))
-    # ods_select = list(od_keys).copy()
-    # seed = 1000
-    # num_ods = 500
-    # np.random.seed(seed)
-    # od_flows = dict(zip(ods_select[:num_ods], np.random.randint(low=1, high=10000, size=num_ods)))
-    # ods = [(o, d) for o, d in od_flows.keys() if od_flows[o, d] > 0]
-    # # END RANDOM EXAMPLE
-
-    cycle_adj_mat_dict, deviation_paths = cycle_deviation_adjacency_matrix(G=G, ods=ods, od_flows=od_flows, D=D,
-                                                                           od_flow_perc=od_flow_perc)
-    print('CYCLE ADJACENCY MATRIX:: ' + str(time.time() - t0))
-
-    # keep_ods = {('S28049000893', 'S48439001761'), ('S28049000893', 'S48113001906'),
-    #             ('S48439001761', 'S28049000893'), ('S48113001906', 'S28049000893')}
-    # od_flows_comb = {k: od_flows[o, d] + od_flows[d, o] for k, (o, d) in zip(range(len(od_list)), od_list)}
-    # od_flows['S28049000893', 'S48113001906'] = 1000
-    # od_flows['S48113001906', 'S28049000893'] = 1000
-
-    od_keys = set((o, d) for o, d in od_flows.keys()).union(set((d, o) for o, d in od_flows.keys()))
-    od_flows = {(o, d): od_flows[o, d] if (o, d) in od_flows.keys() else 0 for o, d in od_keys}
-
-    # # START CORRIDOR EXAMPLE - COMMENT OUT
-    # # ['S48113001906', 'S48231001397', 'S48063001511', 'S48343001491', 'S22017000336', 'S22119000236', 'S22065000403']
-    # od_flows_corr = {('S48113001906', 'S22065000403'): 100, ('S48231001397', 'S22119000236'): 500,
-    #                  ('S48113001906', 'S22017000336'): 100, ('S48063001511', 'S22017000336'): 50}
-    # od_flows = {(o, d): od_flows_corr[o, d] if (o, d) in od_flows_corr.keys() else 0 for o, d in od_keys}
-    # # END CORRIDOR EXAMPLE
-
-    # od_not_in_od_flows = set()
-    # for o, d in od_flows.keys():
-    #     if (d, o) not in od_flows.keys():
-    #         od_not_in_od_flows.add((d, o))
-    #     if (o, d) not in keep_ods:
-    #         od_flows[o, d] = 0
-
-    # for (o, d) in od_not_in_od_flows:
-    #     od_flows[o, d] = 0
-
-    od_list = []
-    od_deviation_path_pairs = []
-    do_deviation_path_pairs = []
-    od_deviation_path_flows = []
-    for o, d in deviation_paths:
-        if (o, d) not in od_flows.keys():
-            od_flows[o, d] = 0
-            od_flows[d, o] = 0
-        if od_flows[o, d] > 0 or od_flows[d, o] > 0:
-            if (o, d) not in od_list and (d, o) not in od_list:
-                od_list.append((o, d))
-                od_deviation_path_pairs.extend([(len(od_list) - 1, p) for p in range(len(deviation_paths[o, d]))])
-                do_deviation_path_pairs.extend([(len(od_list) - 1, p) for p in range(len(deviation_paths[d, o]))])
-                od_deviation_path_flows.extend([od_flows[o, d] + od_flows[d, o]
-                                                for p in range(len(deviation_paths[o, d]))])
-
-    print('Total OD flow:: %.0f' % sum(od_flows.values()))
-
-    # od_flows_comb = {k: od_flows[o, d] + od_flows[d, o] for k, (o, d) in zip(range(len(od_list)), od_list)}
-
-    # set up model
-    m = gp.Model('Facility Network Problem', env=gurobi_suppress_output(suppress_output))
-    # add new variables - for facility location
-    # n many variables; 0 <= x_i <= 1 for all i; if binary==True, will be solved as integer program
-    if binary_prog:
-        x = m.addVars(node_list, obj=0, vtype=GRB.BINARY, name=[str(n) for n in node_list])
-        z = m.addVars(od_deviation_path_pairs, obj=od_deviation_path_flows, vtype=GRB.BINARY,
-                      name=['z' + str(k) for k in od_deviation_path_pairs])
-        w = m.addVars(do_deviation_path_pairs, obj=0, vtype=GRB.BINARY,
-                      name=['w' + str(k) for k in do_deviation_path_pairs])
-        # z = m.addVars([k for k in range(len(cycle_adj_mat_list))], obj=path_flows, lb=0, ub=1,
-                      # name=[str(k) for k in range(len(cycle_adj_mat_list))])
-        # z = m.addVars(od_deviation_path_pairs, obj=0, lb=0, ub=1, name=[str(k) for k in od_deviation_path_pairs])
-    else:
-        x = m.addVars(node_list, obj=0, vtype=GRB.BINARY, name=[str(n) for n in node_list])
-        z = m.addVars(od_deviation_path_pairs, obj=od_deviation_path_flows, lb=0,
-                      name=['z' + str(k) for k in od_deviation_path_pairs])
-        w = m.addVars(do_deviation_path_pairs, obj=0, lb=0,
-                      name=['w' + str(k) for k in do_deviation_path_pairs])
-
-    # add objective fxn
-    m.setObjective(gp.quicksum(z[od_deviation_path_pairs[k]] * od_deviation_path_flows[k]
-                               for k in range(len(od_deviation_path_pairs))), GRB.MAXIMIZE)
-    # add path coverage constraints
-
-    for k in range(len(od_list)):
-        o, d = od_list[k]
-
-        # can only capture up to 100% of flows for O-D pair (o, d) along all possible paths pi connecting (o, d)
-        m.addConstr(gp.quicksum(z[k, pi] for pi in range(len(deviation_paths[o, d]))) <=
-                    gp.quicksum(w[k, pi] for pi in range(len(deviation_paths[d, o]))), name='C4_' + str(k))
-        m.addConstr(gp.quicksum(z[k, pi] for pi in range(len(deviation_paths[o, d]))) <= 1, name='C5_' + str(k))
-        m.addConstr(gp.quicksum(w[k, pi] for pi in range(len(deviation_paths[d, o]))) <= 1, name='C6_' + str(k))
-
-        # A contains list of the 3 adjacency matrices for all possible return paths for all possible outbound paths
-        # i.e. A = [outbound1[return1[a1,a2,a3], ..., returnk[a1,a2,a3]], ...,
-        #           outboundl[return1[a1,a2,a3],...,returnk[a1,a2,a3]]]
-        # note k = l for this case as the outbound and return paths are each other's reversed set
-        a = cycle_adj_mat_dict[o, d]
-        for phi_idx in range(len(deviation_paths[o, d])):
-            phi = deviation_paths[o, d][phi_idx]
-            the = list(reversed(phi))
-            # a_phi = a[phi_idx][the_idx][0]
-            for i_idx in range(len(phi)-1):
-                i = phi[i_idx]
-                # m.addConstr((gp.quicksum(a[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                #              gp.quicksum(
-                #                  gp.quicksum(a[phi_idx][the_idx][1].loc[i, j] * x[j] for j in phi[1:i_idx + 1]) +
-                #                  gp.quicksum(a[phi_idx][the_idx][2].loc[i, j] * x[j]
-                #                              for j in deviation_paths[d, o][the_idx])
-                #                  for the_idx in range(len(deviation_paths[d, o])))) >= z[k, phi_idx],
-                #             name='C2_' + str(k) + '_' + str(phi_idx) + '_' + str(i_idx))
-                # redundant cycles
-                # m.addConstr((gp.quicksum(a[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                #              gp.quicksum(
-                #                  gp.quicksum(a[phi_idx][the_idx][1].loc[i, j] * x[j] for j in phi[:i_idx + 1]) +
-                #                  gp.quicksum(a[phi_idx][the_idx][2].loc[i, j] * x[j]
-                #                              for j in deviation_paths[d, o][the_idx][1:])
-                #                  for the_idx in range(len(deviation_paths[d, o])))) >= z[k, phi_idx],
-                #             name='C2_' + str(k) + '_' + str(phi_idx) + '_' + str(i_idx))
-                # non-redundant cycles
-                m.addConstr((gp.quicksum(a[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                             gp.quicksum(a[phi_idx][0][1].loc[i, j] * x[j] for j in phi[:i_idx + 1]) +
-                             gp.quicksum(a[phi_idx][0][2].loc[i, j] * x[j] for j in the[1:])) >= z[k, phi_idx],
-                            name='C2_' + str(k) + '_' + str(phi_idx) + '_' + str(i_idx))
-                # # reverse
-                # b = cycle_adj_mat_dict[d, o]
-                # # non-redundant cycles
-                # for i_idx in range(len(the) - 1):
-                #     m.addConstr((gp.quicksum(b[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                #                  gp.quicksum(b[phi_idx][0][1].loc[i, j] * x[j] for j in phi[:i_idx + 1]) +
-                #                  gp.quicksum(b[phi_idx][0][2].loc[i, j] * x[j] for j in phi[1:])) >= w[k, phi_idx],
-                #                 name='C3_' + str(k) + '_' + str(phi_idx) + '_' + str(i_idx))
-
-        # reverse
-        b = cycle_adj_mat_dict[d, o]
-        for phi_idx in range(len(deviation_paths[d, o])):
-            phi = deviation_paths[d, o][phi_idx]
-            for i_idx in range(len(phi)-1):
-                i = phi[i_idx]
-                # m.addConstr((gp.quicksum(b[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                #              gp.quicksum(
-                #                  gp.quicksum(b[phi_idx][the_idx][1].loc[i, j] * x[j] for j in phi[1:i_idx + 1]) +
-                #                  gp.quicksum(b[phi_idx][the_idx][2].loc[i, j] * x[j]
-                #                              for j in deviation_paths[o, d][the_idx])
-                #                  for the_idx in range(len(deviation_paths[o, d])))) >= w[k, phi_idx],
-                #             name='C3_' + str(k) + '_' + str(phi_idx) + '_' + str(i_idx))
-                # redundant cycles
-                m.addConstr((gp.quicksum(b[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                             gp.quicksum(
-                                 gp.quicksum(b[phi_idx][the_idx][1].loc[i, j] * x[j] for j in phi[:i_idx + 1]) +
-                                 gp.quicksum(b[phi_idx][the_idx][2].loc[i, j] * x[j]
-                                             for j in deviation_paths[o, d][the_idx][1:])
-                                 for the_idx in range(len(deviation_paths[o, d])))) >= w[k, phi_idx],
-                            name='C3_' + str(k) + '_' + str(phi_idx) + '_' + str(i_idx))
-                # # non-redundant cycles
-                # m.addConstr((gp.quicksum(b[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                #              gp.quicksum(gp.quicksum(b[phi_idx][0][1].loc[i, j] * x[j] for j in phi[:i_idx + 1]) +
-                #                          gp.quicksum(b[phi_idx][0][2].loc[i, j] * x[j]
-                #                                      for j in deviation_paths[o, d][phi_idx][1:]))) >= w[k, phi_idx],
-                #             name='C3_' + str(k) + '_' + str(phi_idx) + '_' + str(i_idx))
-
-    # for o, d in od_list:
-    #     if (o, d) not in keep_ods and (d, o) not in keep_ods:
-    #         od_flows_comb[o, d] = 0
-    #         od_flows_comb[d, o] = 0
-    # only sum those for one-way O-D flows (not round-trip, i.e., if i->j included, do not necessarily add flow of j->i)
-
-    m.addConstr(gp.quicksum(x[n] for n in node_list) <= budget, name='C7_budget')
-
-    # write ILP model
-    # m.write('/Users/adrianhz/Desktop/KCS_test_DP_ILP.lp')
-    # optimize
-    m.update()
-    m.optimize()
-    # print(m.display())
-    # extract solution values
-    x_val = m.getAttr('x', x).items()  # get facility placement values
-    z_val = m.getAttr('x', z).items()
-    w_val = m.getAttr('x', w).items()
-    obj_val = m.objval  # get objective fxn value
-
-    z_val = {i: v for i, v in z_val}
-    w_val = {i: v for i, v in w_val}
-    # print('# Facilities:: %s' % sum(v for _, v in x_val))
-    # tm_capt_sanity1 = sum(od_flows_comb[k] * sum(z_val[k, phi_idx]
-    #                                              for phi_idx in range(len(deviation_paths[od_list[k]])))
-    #                       for k in range(len(od_list)))
-    tm_capt_sanity2 = sum(od_flows[o, d] * sum(z_val[k, phi_idx] for phi_idx in range(len(deviation_paths[o, d]))) +
-                          od_flows[d, o] * sum(w_val[k, phi_idx] for phi_idx in range(len(deviation_paths[d, o])))
-                          for (o, d), k in zip(od_list, range(len(od_list))))
-    # print('Ton-miles captured:: %s' % obj_val)
-    # print('Percentage ton-miles captured:: %s' % (obj_val / sum(od_flows.values())))
-    # print('Total OD flows:: %s' % str(sum(od_flows.values())))
-
-    # TODO: replace with a different solution rounding technique
-    epsilon = 0.0001
-    # epsilon = 0
-    super_path_nodes = dict()
-    subpath_nodes = dict()
-    super_path_edges = dict()
-    subpath_edges = dict()
-    for k in range(len(od_list)):
-        o, d = od_list[k]
-        for phi_idx in range(len(deviation_paths[o, d])):
-            if z_val[k, phi_idx] >= 1 - epsilon:
-                super_path_nodes[o, d] = deviation_paths[o, d][phi_idx]
-                subpath_nodes[o, d] = shortest_path(G, source=o, target=d, weight='km')
-                super_path_edges[o, d] = node_to_edge_path(deviation_paths[o, d][phi_idx])
-                subpath_edges[o, d] = node_to_edge_path(shortest_path(G, source=o, target=d, weight='km'))
-        for phi_idx in range(len(deviation_paths[d, o])):
-            if w_val[k, phi_idx] >= 1 - epsilon:
-                super_path_nodes[d, o] = deviation_paths[d, o][phi_idx]
-                subpath_nodes[d, o] = shortest_path(G, source=d, target=o, weight='km')
-                super_path_edges[d, o] = node_to_edge_path(deviation_paths[d, o][phi_idx])
-                subpath_edges[d, o] = node_to_edge_path(shortest_path(G, source=d, target=o, weight='km'))
-
-    # path_nodes = []
-    # path_edges = []
-    # for k in range(len(od_list)):
-    #     for phi_idx in range(len(deviation_paths[od_list[k]])):
-    #         if zz_val[k, phi_idx] == 1:
-    #             path_nodes.append(deviation_paths[od_list[k]][phi_idx])
-    #             path_edges.append(node_to_edge_path(deviation_paths[od_list[k]][phi_idx]))
-
-    # for k, v in z_val.items():
-    #     if 0 < v < 1 - epsilon:
-    #         print(k, v)
-    # for k, v in w_val.items():
-    #     if 0 < v < 1 - epsilon:
-    #         print(k, v)
-
-    G.graph['framework'] = dict(
-        ods=list(set(od_list[k] for k in range(len(od_list))
-                     if sum(z_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]]))) == 1)),
-        path_nodes=super_path_nodes,
-        path_edges=super_path_edges,
-        subpath_nodes=subpath_nodes,
-        subpath_edges=subpath_edges,
-        # path_nodes=[p for p in deviation_paths[od_list[k]] for k in range(len(od_list))
-        #             if sum(zz_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]]))) == 1],
-        # path_edges=[node_to_edge_path(p) for p in deviation_paths[od_list[k]] for k in range(len(od_list))
-        #             if sum(zz_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]]))) == 1],
-        tm_capt_perc=obj_val / sum(od_flows.values()),
-        # tm_capt_perc_sanity1=tm_capt_sanity1 / sum(od_flows.values()),
-        tm_capt_perc_sanity2=tm_capt_sanity2 / sum(od_flows.values()),
-        tm_capt=obj_val,
-        # tm_capt_sanity1=tm_capt_sanity1,
-        tm_capt_sanity2=tm_capt_sanity2,
-        od_flows=od_flows,
-        od_deviation_path_flows=od_deviation_path_flows,
-        # od_flows_comb=od_flows_comb,
-        w_val=w_val,
-        z_val=z_val,
-        deviation_paths=deviation_paths,
-        # od_deviation_path_pairs=od_deviation_path_pairs,
-        # do_deviation_path_pairs=do_deviation_path_pairs,
-        od_list=od_list
-    )
-
-    return x_val, obj_val, obj_val, G
-
-
-def facility_deviation_paths_select_reduced(G: nx.Graph, D: float, ods: list, od_flows: dict, flow_min: float,
-                                            od_flow_perc: float = 1,
-                                            binary_prog=False, suppress_output=True):
-    """
-    Solve and plot solution for path constrained facility location problem
-
-    For infeasible stretches
-    -Can facility set to be priority set nodes and include all 'Other' type nodes as clients in the future
-    -Find shortest path from all priority set nodes to ALL nodes (priority set + 'Other') using nx.multi_source_dijkstra
-    -Only allow facilities to be placed at priority set nodes and allow for additional variables z_j to mark infeasible
-        locations for each of the 'Other' nodes not satisfied.
-    :param tolerance:
-    :param rr:
-    :param all_pairs:
-    :param intertypes:
-    :param D: [float] range in km
-    :param binary_prog:
-    :param path_cnstrs_only:
-    :param plot:
-    :param plot_paths: for plotting only paths
-    :param origin:
-    :return:
-    """
-
-    node_list = list(G.nodes())
-    # adjacency matrix based on all pairs shortest path distances
-    # extract path-based adjacency matrices for each shortest path from paths_od to apply to model constraints
-    t0 = time.time()
-    cycle_adj_mat_dict, deviation_paths = cycle_deviation_adjacency_matrix_nr(G=G, ods=ods, od_flows=od_flows, D=D,
-                                                                              od_flow_perc=od_flow_perc)
-    print('CYCLE ADJACENCY MATRIX:: ' + str(time.time() - t0))
-
-    # keep_ods = {('S28049000893', 'S48439001761'), ('S28049000893', 'S48113001906'),
-    #             ('S48439001761', 'S28049000893'), ('S48113001906', 'S28049000893')}
-    # od_flows_comb = {k: od_flows[o, d] + od_flows[d, o] for k, (o, d) in zip(range(len(od_list)), od_list)}
-    # od_flows['S28049000893', 'S48113001906'] = 1000
-    # od_flows['S48113001906', 'S28049000893'] = 1000
-
-    od_flows_keys = list(od_flows.keys())
-    for o, d in od_flows_keys:
-        if (d, o) not in od_flows.keys():
-            od_flows[d, o] = 0
-
-    od_list = []
-    od_deviation_path_pairs = []
-    for o, d in deviation_paths:
-        if (o, d) not in od_flows.keys():
-            od_flows[o, d] = 0
-            od_flows[d, o] = 0
-        if od_flows[o, d] > 0 or od_flows[d, o] > 0:
-            if (o, d) not in od_list and (d, o) not in od_list:
-                od_list.append((o, d))
-                od_deviation_path_pairs.extend([(len(od_list) - 1, p) for p in range(len(deviation_paths[o, d]))])
-
-    print('Total OD flow:: %.0f' % sum(od_flows.values()))
-
-    od_flows_comb = {k: od_flows[o, d] + od_flows[d, o] for k, (o, d) in zip(range(len(od_list)), od_list)}
-
-    # set up model
-    m = gp.Model('Facility Network Problem', env=gurobi_suppress_output(suppress_output))
-    # add new variables - for facility location
-    # n many variables; 0 <= x_i <= 1 for all i; if binary==True, will be solved as integer program
-    if binary_prog:
-        x = m.addVars(node_list, obj=1, vtype=GRB.BINARY, name=[str(n) for n in node_list])
-        z = m.addVars(od_deviation_path_pairs, obj=0, vtype=GRB.BINARY, name=[str(k) for k in od_deviation_path_pairs])
-    else:
-        x = m.addVars(node_list, obj=1, vtype=GRB.BINARY, name=[str(n) for n in node_list])
-        z = m.addVars(od_deviation_path_pairs, obj=0, lb=0, name=[str(k) for k in od_deviation_path_pairs])
-
-    # add objective fxn
-    # m.setObjective(gp.quicksum(x[i] for i in node_list), GRB.MINIMIZE)
-    # add path coverage constraints
-
-    for k in range(len(od_list)):
-        o, d = od_list[k]
-
-        # can only capture up to 100% of flows for O-D pair (o, d) along all possible paths pi connecting (o, d)
-        m.addConstr(gp.quicksum(z[k, pi] for pi in range(len(deviation_paths[o, d]))) <= 1)
-
-        # A contains list of the 3 adjacency matrices for all possible return paths for all possible outbound paths
-        # i.e. A = [outbound1[return1[a1,a2,a3], ..., returnk[a1,a2,a3]], ...,
-        #           outboundl[return1[a1,a2,a3],...,returnk[a1,a2,a3]]]
-        # note k = l for this case as the outbound and return paths are each other's reversed set
-        a = cycle_adj_mat_dict[o, d]
-        for phi_idx in range(len(deviation_paths[o, d])):
-            phi = deviation_paths[o, d][phi_idx]
-            # a_phi = a[phi_idx][the_idx][0]
-            for i_idx in range(len(phi)-1):
-                i = phi[i_idx]
-                m.addConstr((gp.quicksum(a[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                             gp.quicksum(
-                                 gp.quicksum(a[phi_idx][the_idx][1].loc[i, j] * x[j] for j in phi[1:i_idx + 1]) +
-                                 gp.quicksum(a[phi_idx][the_idx][2].loc[i, j] * x[j]
-                                             for j in deviation_paths[d, o][the_idx])
-                                 for the_idx in range(len(deviation_paths[d, o])))) >= z[k, phi_idx])
-        # reverse
-        b = cycle_adj_mat_dict[d, o]
-        for phi_idx in range(len(deviation_paths[d, o])):
-            phi = deviation_paths[d, o][phi_idx]
-            for i_idx in range(len(phi)-1):
-                i = phi[i_idx]
-                m.addConstr((gp.quicksum(b[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                             gp.quicksum(
-                                 gp.quicksum(b[phi_idx][the_idx][1].loc[i, j] * x[j] for j in phi[1:i_idx + 1]) +
-                                 gp.quicksum(b[phi_idx][the_idx][2].loc[i, j] * x[j]
-                                             for j in deviation_paths[d, o][the_idx])
-                                 for the_idx in range(len(deviation_paths[d, o])))) >= z[k, phi_idx])
-
-    # for o, d in od_list:
-    #     if (o, d) not in keep_ods and (d, o) not in keep_ods:
-    #         od_flows_comb[o, d] = 0
-    #         od_flows_comb[d, o] = 0
-    # only sum those for one-way O-D flows (not round-trip, i.e., if i->j included, do not necessarily add flow of j->i)
-    tm_min = flow_min * sum(od_flows_comb.values())
-    m.addConstr(gp.quicksum(od_flows_comb[k] *
-                            gp.quicksum(z[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]])))
-                            for k in range(len(od_list))) >= tm_min, name='coverage')
-    # m.write('/Users/adrianhz/Desktop/KCS_test_ILP.lp')
-    # optimize
-    m.update()
-    m.optimize()
-    # print(m.display())
-    # extract solution values
-    x_val = m.getAttr('x', x).items()  # get facility placement values
-    z_val = m.getAttr('x', z).items()
-    obj_val = m.objval  # get objective fxn value
-
-    z_val = {i: v for i, v in z_val}
-    # print('# Facilities:: %s' % sum(v for _, v in x_val))
-    tm_capt = sum(od_flows_comb[k] * sum(z_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]])))
-                  for k in range(len(od_list)))
-    tm_capt_sanity = sum(od_flows[o, d] * sum(z_val[k, phi_idx] for phi_idx in range(len(deviation_paths[o, d]))) +
-                         od_flows[d, o] * sum(z_val[k, phi_idx] for phi_idx in range(len(deviation_paths[d, o])))
-                         for (o, d), k in zip(od_list, range(len(od_list))))
-    # print('Ton-miles captured:: %s' % tm_capt)
-    # print('Percentage ton-miles captured:: %s' % (tm_capt / sum(od_flows.values())))
-    # print('Total OD flows:: %s' % str(sum(od_flows.values())))
-
-    epsilon = 0.0001
-    # epsilon = 0
-    super_path_nodes = dict()
-    subpath_nodes = dict()
-    super_path_edges = dict()
-    subpath_edges = dict()
-    for k in range(len(od_list)):
-        o, d = od_list[k]
-        for phi_idx in range(len(deviation_paths[o, d])):
-            if z_val[k, phi_idx] >= 1 - epsilon:
-                super_path_nodes[o, d] = deviation_paths[o, d][phi_idx]
-                subpath_nodes[o, d] = shortest_path(G, source=o, target=d, weight='km')
-                super_path_edges[o, d] = node_to_edge_path(deviation_paths[o, d][phi_idx])
-                subpath_edges[o, d] = node_to_edge_path(shortest_path(G, source=o, target=d, weight='km'))
-        for phi_idx in range(len(deviation_paths[d, o])):
-            if z[k, phi_idx] >= 1 - epsilon:
-                super_path_nodes[d, o] = deviation_paths[d, o][phi_idx]
-                subpath_nodes[d, o] = shortest_path(G, source=d, target=o, weight='km')
-                super_path_edges[d, o] = node_to_edge_path(deviation_paths[d, o][phi_idx])
-                subpath_edges[d, o] = node_to_edge_path(shortest_path(G, source=d, target=o, weight='km'))
-
-    # path_nodes = []
-    # path_edges = []
-    # for k in range(len(od_list)):
-    #     for phi_idx in range(len(deviation_paths[od_list[k]])):
-    #         if zz_val[k, phi_idx] == 1:
-    #             path_nodes.append(deviation_paths[od_list[k]][phi_idx])
-    #             path_edges.append(node_to_edge_path(deviation_paths[od_list[k]][phi_idx]))
-
-    for k, v in z_val.items():
-        if 0 < v < 1 - epsilon:
-            print(k, v)
-
-    G.graph['framework'] = dict(
-        ods=list(set(od_list[k] for k in range(len(od_list))
-                     if sum(z_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]]))) == 1)),
-        path_nodes=super_path_nodes,
-        path_edges=super_path_edges,
-        subpath_nodes=subpath_nodes,
-        subpath_edges=subpath_edges,
-        # path_nodes=[p for p in deviation_paths[od_list[k]] for k in range(len(od_list))
-        #             if sum(zz_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]]))) == 1],
-        # path_edges=[node_to_edge_path(p) for p in deviation_paths[od_list[k]] for k in range(len(od_list))
-        #             if sum(zz_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]]))) == 1],
-        tm_capt_perc=tm_capt / sum(od_flows.values()),
-        tm_capt_perc_sanity=tm_capt_sanity / sum(od_flows.values()),
-        tm_capt=tm_capt,
-        tm_capt_sanity=tm_capt_sanity,
-        od_flows=od_flows,
-        od_flows_comb=od_flows_comb,
-        w_val=z_val,
-        z_val=z_val,
-        deviation_paths=deviation_paths,
-        # od_deviation_path_pairs=od_deviation_path_pairs,
-        # do_deviation_path_pairs=do_deviation_path_pairs,
-        od_list=od_list
-    )
-
-    return x_val, obj_val, tm_capt, G
-
-
-def max_flow_facility_deviation_paths_select_reduced(G: nx.Graph, D: float, ods: list, od_flows: dict,
-                                                     budget: float=None, od_flow_perc: float = 1,
-                                                     binary_prog=False, suppress_output=True):
-    """
-    Solve and plot solution for path constrained facility location problem
-
-    For infeasible stretches
-    -Can facility set to be priority set nodes and include all 'Other' type nodes as clients in the future
-    -Find shortest path from all priority set nodes to ALL nodes (priority set + 'Other') using nx.multi_source_dijkstra
-    -Only allow facilities to be placed at priority set nodes and allow for additional variables z_j to mark infeasible
-        locations for each of the 'Other' nodes not satisfied.
-    :param tolerance:
-    :param rr:
-    :param all_pairs:
-    :param intertypes:
-    :param D: [float] range in km
-    :param binary_prog:
-    :param path_cnstrs_only:
-    :param plot:
-    :param plot_paths: for plotting only paths
-    :param origin:
-    :return:
-    """
-
-    node_list = list(G.nodes())
-    # adjacency matrix based on all pairs shortest path distances
-    # extract path-based adjacency matrices for each shortest path from paths_od to apply to model constraints
-    t0 = time.time()
-    cycle_adj_mat_dict, deviation_paths = cycle_deviation_adjacency_matrix_nr(G=G, ods=ods, od_flows=od_flows, D=D,
-                                                                              od_flow_perc=od_flow_perc)
-    print('CYCLE ADJACENCY MATRIX:: ' + str(time.time() - t0))
-
-    # keep_ods = {('S28049000893', 'S48439001761'), ('S28049000893', 'S48113001906'),
-    #             ('S48439001761', 'S28049000893'), ('S48113001906', 'S28049000893')}
-    # od_flows_comb = {k: od_flows[o, d] + od_flows[d, o] for k, (o, d) in zip(range(len(od_list)), od_list)}
-    # od_flows['S28049000893', 'S48113001906'] = 1000
-    # od_flows['S48113001906', 'S28049000893'] = 1000
-
-    od_not_in_od_flows = set()
-    for o, d in od_flows.keys():
-        if (d, o) not in od_flows.keys():
-            od_not_in_od_flows.add((d, o))
-        # if (o, d) not in keep_ods:
-        #     od_flows[o, d] = 0
-
-    for (o, d) in od_not_in_od_flows:
-        od_flows[o, d] = 0
-
-    od_list = []
-    od_deviation_path_pairs = []
-    od_deviation_path_flows = []
-    for o, d in deviation_paths:
-        if (o, d) not in od_flows.keys():
-            od_flows[o, d] = 0
-            od_flows[d, o] = 0
-        if od_flows[o, d] > 0 or od_flows[d, o] > 0:
-            if (o, d) not in od_list and (d, o) not in od_list:
-                od_list.append((o, d))
-                od_deviation_path_pairs.extend([(len(od_list) - 1, p) for p in range(len(deviation_paths[o, d]))])
-                od_deviation_path_flows.extend([od_flows[o, d] + od_flows[d, o]
-                                                for p in range(len(deviation_paths[o, d]))])
-
-    print('Total OD flow:: %.0f' % sum(od_flows.values()))
-
-    od_flows_comb = {k: od_flows[o, d] + od_flows[d, o] for k, (o, d) in zip(range(len(od_list)), od_list)}
-
-    # set up model
-    m = gp.Model('Facility Network Problem', env=gurobi_suppress_output(suppress_output))
-    # add new variables - for facility location
-    # n many variables; 0 <= x_i <= 1 for all i; if binary==True, will be solved as integer program
-    if binary_prog:
-        x = m.addVars(node_list, obj=1, vtype=GRB.BINARY, name=[str(n) for n in node_list])
-        z = m.addVars(od_deviation_path_pairs, obj=od_deviation_path_flows, vtype=GRB.BINARY,
-                      name=[str(k) for k in od_deviation_path_pairs])
-    else:
-        x = m.addVars(node_list, obj=1, vtype=GRB.BINARY, name=[str(n) for n in node_list])
-        z = m.addVars(od_deviation_path_pairs, obj=0, lb=0, name=[str(k) for k in od_deviation_path_pairs])
-
-    # add objective fxn
-    m.setObjective(gp.quicksum(z[od_deviation_path_pairs[k]] * od_deviation_path_flows[k]
-                               for k in range(len(od_deviation_path_pairs))), GRB.MAXIMIZE)
-    # add path coverage constraints
-
-    for k in range(len(od_list)):
-        o, d = od_list[k]
-
-        # can only capture up to 100% of flows for O-D pair (o, d) along all possible paths pi connecting (o, d)
-        m.addConstr(gp.quicksum(z[k, pi] for pi in range(len(deviation_paths[o, d]))) <= 1)
-
-        # A contains list of the 3 adjacency matrices for all possible return paths for all possible outbound paths
-        # i.e. A = [outbound1[return1[a1,a2,a3], ..., returnk[a1,a2,a3]], ...,
-        #           outboundl[return1[a1,a2,a3],...,returnk[a1,a2,a3]]]
-        # note k = l for this case as the outbound and return paths are each other's reversed set
-        a = cycle_adj_mat_dict[o, d]
-        for phi_idx in range(len(deviation_paths[o, d])):
-            phi = deviation_paths[o, d][phi_idx]
-            # a_phi = a[phi_idx][the_idx][0]
-            for i_idx in range(len(phi)-1):
-                i = phi[i_idx]
-                m.addConstr((gp.quicksum(a[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                             gp.quicksum(
-                                 gp.quicksum(a[phi_idx][the_idx][1].loc[i, j] * x[j] for j in phi[1:i_idx + 1]) +
-                                 gp.quicksum(a[phi_idx][the_idx][2].loc[i, j] * x[j]
-                                             for j in deviation_paths[d, o][the_idx])
-                                 for the_idx in range(len(deviation_paths[d, o])))) >= z[k, phi_idx])
-        # reverse
-        b = cycle_adj_mat_dict[d, o]
-        for phi_idx in range(len(deviation_paths[d, o])):
-            phi = deviation_paths[d, o][phi_idx]
-            for i_idx in range(len(phi)-1):
-                i = phi[i_idx]
-                m.addConstr((gp.quicksum(b[phi_idx][0][0].loc[i, j] * x[j] for j in phi[i_idx + 1:]) +
-                             gp.quicksum(
-                                 gp.quicksum(b[phi_idx][the_idx][1].loc[i, j] * x[j] for j in phi[1:i_idx + 1]) +
-                                 gp.quicksum(b[phi_idx][the_idx][2].loc[i, j] * x[j]
-                                             for j in deviation_paths[d, o][the_idx])
-                                 for the_idx in range(len(deviation_paths[d, o])))) >= z[k, phi_idx])
-
-    # for o, d in od_list:
-    #     if (o, d) not in keep_ods and (d, o) not in keep_ods:
-    #         od_flows_comb[o, d] = 0
-    #         od_flows_comb[d, o] = 0
-    # only sum those for one-way O-D flows (not round-trip, i.e., if i->j included, do not necessarily add flow of j->i)
-
-    m.addConstr(gp.quicksum(x[n] for n in node_list) <= budget, name='budget')
-
-    m.write('/Users/adrianhz/Desktop/KCS_test_ILP.lp')
-    # optimize
-    m.update()
-    m.optimize()
-    # print(m.display())
-    # extract solution values
-    x_val = m.getAttr('x', x).items()  # get facility placement values
-    z_val = m.getAttr('x', z).items()
-    obj_val = m.objval  # get objective fxn value
-
-    z_val = {i: v for i, v in z_val}
-    # print('# Facilities:: %s' % sum(v for _, v in x_val))
-    tm_capt_sanity1 = sum(od_flows_comb[k] * sum(z_val[k, phi_idx]
-                                                 for phi_idx in range(len(deviation_paths[od_list[k]])))
-                          for k in range(len(od_list)))
-    tm_capt_sanity2 = sum(od_flows[o, d] * sum(z_val[k, phi_idx] for phi_idx in range(len(deviation_paths[o, d]))) +
-                          od_flows[d, o] * sum(z_val[k, phi_idx] for phi_idx in range(len(deviation_paths[d, o])))
-                          for (o, d), k in zip(od_list, range(len(od_list))))
-    # print('Ton-miles captured:: %s' % obj_val)
-    # print('Percentage ton-miles captured:: %s' % (obj_val / sum(od_flows.values())))
-    # print('Total OD flows:: %s' % str(sum(od_flows.values())))
-
-    # TODO: replace with a different solution rounding technique
-    epsilon = 0.0001
-    # epsilon = 0
-    super_path_nodes = dict()
-    subpath_nodes = dict()
-    super_path_edges = dict()
-    subpath_edges = dict()
-    for k in range(len(od_list)):
-        o, d = od_list[k]
-        for phi_idx in range(len(deviation_paths[o, d])):
-            if z_val[k, phi_idx] >= 1 - epsilon:
-                super_path_nodes[o, d] = deviation_paths[o, d][phi_idx]
-                subpath_nodes[o, d] = shortest_path(G, source=o, target=d, weight='km')
-                super_path_edges[o, d] = node_to_edge_path(deviation_paths[o, d][phi_idx])
-                subpath_edges[o, d] = node_to_edge_path(shortest_path(G, source=o, target=d, weight='km'))
-        for phi_idx in range(len(deviation_paths[d, o])):
-            if z_val[k, phi_idx] >= 1 - epsilon:
-                super_path_nodes[d, o] = deviation_paths[d, o][phi_idx]
-                subpath_nodes[d, o] = shortest_path(G, source=d, target=o, weight='km')
-                super_path_edges[d, o] = node_to_edge_path(deviation_paths[d, o][phi_idx])
-                subpath_edges[d, o] = node_to_edge_path(shortest_path(G, source=d, target=o, weight='km'))
-
-    # path_nodes = []
-    # path_edges = []
-    # for k in range(len(od_list)):
-    #     for phi_idx in range(len(deviation_paths[od_list[k]])):
-    #         if zz_val[k, phi_idx] == 1:
-    #             path_nodes.append(deviation_paths[od_list[k]][phi_idx])
-    #             path_edges.append(node_to_edge_path(deviation_paths[od_list[k]][phi_idx]))
-
-    # for k, v in z_val.items():
-    #     if 0 < v < 1 - epsilon:
-    #         print(k, v)
-    # for k, v in w_val.items():
-    #     if 0 < v < 1 - epsilon:
-    #         print(k, v)
-
-    G.graph['framework'] = dict(
-        ods=list(set(od_list[k] for k in range(len(od_list))
-                     if sum(z_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]]))) == 1)),
-        path_nodes=super_path_nodes,
-        path_edges=super_path_edges,
-        subpath_nodes=subpath_nodes,
-        subpath_edges=subpath_edges,
-        # path_nodes=[p for p in deviation_paths[od_list[k]] for k in range(len(od_list))
-        #             if sum(zz_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]]))) == 1],
-        # path_edges=[node_to_edge_path(p) for p in deviation_paths[od_list[k]] for k in range(len(od_list))
-        #             if sum(zz_val[k, phi_idx] for phi_idx in range(len(deviation_paths[od_list[k]]))) == 1],
-        tm_capt_perc=obj_val / sum(od_flows.values()),
-        tm_capt_perc_sanity1=tm_capt_sanity1 / sum(od_flows.values()),
-        tm_capt_perc_sanity2=tm_capt_sanity2 / sum(od_flows.values()),
-        tm_capt=obj_val,
-        tm_capt_sanity1=tm_capt_sanity1,
-        tm_capt_sanity2=tm_capt_sanity2,
-        od_flows=od_flows,
-        od_flows_comb=od_flows_comb,
-        w_val=z_val,
-        z_val=z_val,
-        deviation_paths=deviation_paths,
-        # od_deviation_path_pairs=od_deviation_path_pairs,
-        # do_deviation_path_pairs=do_deviation_path_pairs,
-        od_list=od_list
-    )
-
-    return x_val, obj_val, obj_val, G
 
 '''
 SOLUTION PROCESSING
@@ -1372,9 +403,7 @@ SOLUTION PROCESSING
 
 
 def facility_location(G: nx.Graph, D: float, ods=None, od_flows: dict = None, flow_min: float = None,
-                      budget: int = None, max_flow=False, extend_graph=True, od_flow_perc: float = 1,
-                      deviation_paths=True,
-                      select_cycles=False, binary_prog=False, suppress_output=True):
+                      budget: int = None, max_flow=False, extend_graph=True, suppress_output=True):
     """
 
     Parameters
@@ -1400,43 +429,16 @@ def facility_location(G: nx.Graph, D: float, ods=None, od_flows: dict = None, fl
 
     paths = [shortest_path(G, source=o, target=d, weight='km') for o, d in ods]
 
-    if select_cycles:
-        # for b in range(1, 8):
-        #     _, _ = max_flow_facility_network_cycle_ilp_select(G=G, D=D, paths=paths, od_flows=od_flows, budget=b,
-        #                                                       binary_prog=binary_prog, suppress_output=True)
-        if max_flow:
-            if deviation_paths:
-                x_val, _, _, G = max_flow_facility_deviation_paths_select(G=G, D=D, ods=ods, od_flows=od_flows,
-                                                                          budget=budget, od_flow_perc=od_flow_perc,
-                                                                          binary_prog=binary_prog,
-                                                                          suppress_output=suppress_output)
-            else:
-                x_val, _ = max_flow_facility_network_cycle_ilp_select(G=G, D=D, paths=paths, od_flows=od_flows,
-                                                                      budget=budget,
-                                                                      binary_prog=binary_prog,
-                                                                      suppress_output=suppress_output)
-        else:
-            if deviation_paths:
-                x_val, _, _, G = facility_deviation_paths_select(G=G, D=D, ods=ods, od_flows=od_flows,
-                                                                 flow_min=flow_min, od_flow_perc=od_flow_perc,
-                                                                 binary_prog=binary_prog,
-                                                                 suppress_output=suppress_output)
-            else:
-                x_val, _, _, G = facility_network_cycle_ilp_select(G=G, D=D, paths=paths, od_flows=od_flows,
-                                                                   flow_min=flow_min,
-                                                                   binary_prog=binary_prog,
-                                                                   suppress_output=suppress_output)
+    if max_flow:
+        x_val, _, G = max_flow_facility_network_cycle_ilp_select(G=G, D=D, paths=paths, od_flows=od_flows,
+                                                                 budget=budget, suppress_output=suppress_output)
     else:
-        # store path information for future analysis
-        G.graph['framework'] = dict(ods=ods, path_nodes=paths, path_edges=[node_to_edge_path(p) for p in paths])
-
-        x_val, _, _ = facility_network_cycle_ilp(G=G, D=D, paths=paths, od_flows=od_flows,
-                                                 binary_prog=binary_prog, suppress_output=suppress_output)
+        x_val, _, _, G = facility_network_cycle_ilp_select(G=G, D=D, paths=paths, od_flows=od_flows,
+                                                           flow_min=flow_min, suppress_output=suppress_output)
 
     G.graph['approx_range_km'] = D
     G.graph['approx_range_mi'] = D / 1.6
 
-    # TODO: replace with a different solution rounding technique
     G = covered_graph(G, x_val, D, extend_graph=extend_graph)
     H = selected_subgraph(G)
 
@@ -1548,7 +550,6 @@ def cycle_adjacency_matrix(G: nx.Graph, paths: list, D: float):
     for k in range(len(feasible_paths)):
         p = feasible_paths[k]
         if (p[0], p[-1]) not in covered_ods:
-            # TODO: do we include the reverse of OD?
             # if OD of this path not yet served
             covered_ods.add((p[0], p[-1]))
         else:

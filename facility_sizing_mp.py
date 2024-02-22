@@ -15,10 +15,6 @@ FACILITY SIZING:
 
 '''
 
-RAIL_DATA_DIR = '/Users/maxng/Library/CloudStorage/OneDrive-NorthwesternUniversity/ARPA-E LOCOMOTIVES/Rail Data'
-KM2MI = 0.62137119  # [mi/km]
-
-
 '''
 GRAPH PREPROCESSING
 '''
@@ -87,7 +83,6 @@ def facility_sizing_step_mp(G: nx.DiGraph, time_step: str, fuel_type: str, D: fl
     if unit_sizing_obj:
         cost_p_location = {i: 1 for i in G.nodes}
     else:
-        # TODO: use updated time- and state-specific emissions costs
         # if <emissions_obj> then cost is in [gCO2/kWh], otherwise, cost is in [$/MWh]
         cost_p_location = elec_rate_state_mp(G, year=time_step)
 

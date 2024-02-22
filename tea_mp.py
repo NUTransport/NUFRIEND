@@ -94,7 +94,6 @@ def tea_battery_mp(G: nx.DiGraph, time_horizon: list):
 #                   'Total charging cost [$/kWh]', 'Charging station capital investment',
 #                   'Annual O&M cost (w/energy cost)']
 #     df_lookup = df.groupby(by=['Number of Locomotive', 'Locomotive per charger']).first().loc[(avg_loc, slice(None))]
-#     # TODO: verify this interpolation makes sense and is like the one for H2
 #     if actual_loco_p_charger <= min(locos_p_charger):
 #         # use min util
 #         lookup_locos = min(locos_p_charger)
@@ -197,7 +196,6 @@ def tea_battery(avg_loc: float, avg_mwh: float, elec_rate: float, max_util: floa
                   'Total charging cost [$/kWh]', 'Charging station capital investment',
                   'Annual O&M cost (w/energy cost)']
     df_lookup = df.groupby(by=['Number of Locomotive', 'Locomotive per charger']).first().loc[(avg_loc, slice(None))]
-    # TODO: verify this interpolation makes sense and is like the one for H2
     if actual_loco_p_charger <= min(locos_p_charger):
         # use min util
         lookup_locos = min(locos_p_charger)
@@ -537,15 +535,12 @@ HYDROGEN
 '''
 
 
-# TODO: make for MP
 def tea_hydrogen(peak_loc: float, avg_loc: float, avg_kgh2: float, max_util: float = 0.88,
                  loc2kgh2: float = 4000, station_type: str = 'Cryo-pump', clean_energy_dolkg: float = None):
     """
     Calculates the breakdown of LCO into capital, O&M, and energy costs as well as the capital investment,
     annual O&M + energy cost, and actual average utilization and number of chargers for a battery charging facility
     of given throughput and size based on <peak_loc>, <max_util>, and <avg_loc>.
-
-    TODO: fix this/ trim down
 
     # perform interpolation of results for a facility of given <peak_loc>, <max_util>, and <avg_loc> and
     # return the breakdown of LCO into: capital, O&M, and energy

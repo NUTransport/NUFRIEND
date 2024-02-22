@@ -1,13 +1,9 @@
-import networkx as nx
-import pandas as pd
-
 from util import *
 # MODULES
-from helper import splc_to_node, datetime_to_mmddyyyy, mmddyyyy_to_datetime, node_to_edge_path, \
-    load_comm_energy_ratios, load_railroad_comm_ton_car, load_conversion_factors, load_fuel_tech_eff_factor, \
-    load_railroad_values, extract_rr, load_hybrid_energy_intensity_values
-from network_representation import plot_graph
-from flow_data_processing import RR_SPLC_comm_grouping, RR_SPLC_comm_date_grouping
+from helper import splc_to_node, mmddyyyy_to_datetime, node_to_edge_path, \
+    load_comm_energy_ratios, load_conversion_factors, load_fuel_tech_eff_factor, \
+    load_railroad_values, extract_rr, load_hybrid_energy_intensity_values, \
+    load_flow_data_df_csv, load_flow_data_date_df_csv
 from input_output import load_dict_from_json, dict_to_json
 
 '''
@@ -15,20 +11,20 @@ ROUTING METHODS
 '''
 
 
-def route_flows(G: nx.DiGraph, fuel_type: str, H: nx.DiGraph = None, D: float = None, CCWS_filename: str = None,
-                time_window: tuple = None, freq: str = 'M',
-                reroute=True, switch_tech=False, max_reroute_inc: float = None):
+def route_flows(G: nx.DiGraph, fuel_type: str, flow_data_filename: str, H: nx.DiGraph = None, D: float = None,
+                reroute=True, switch_tech=False, max_reroute_inc: float = None, year: int = None, freq: str = None):
+
     if not H:
-        return route_baseline_flows(G=G, CCWS_filename=CCWS_filename, time_window=time_window)
+        return route_baseline_flows(G=G, flow_data_filename=flow_data_filename)
     else:
-        # TODO: must route flows for hybrid as in baseline flows, since it is not range-dependent,
-        #  no rerouting is necessary
         if 'hybrid' in fuel_type:
-            return route_peak_avg_flows_hybrid(G=G, H=H, fuel_type=fuel_type, D=D, CCWS_filename=CCWS_filename,
-                                               freq=freq, reroute=reroute, switch_tech=switch_tech,
+            return route_peak_avg_flows_hybrid(G=G, H=H, fuel_type=fuel_type,
+                                               flow_data_filename=flow_data_filename,
+                                               reroute=reroute, switch_tech=switch_tech,
                                                max_reroute_inc=max_reroute_inc)
         else:
-            return route_peak_avg_flows(G=G, H=H, fuel_type=fuel_type, D=D, CCWS_filename=CCWS_filename, freq=freq,
+            return route_peak_avg_flows(G=G, H=H, fuel_type=fuel_type, D=D, flow_data_filename=flow_data_filename,
+                                        year=year, freq=freq,
                                         reroute=reroute, switch_tech=switch_tech, max_reroute_inc=max_reroute_inc)
 
 
@@ -127,17 +123,14 @@ def path_link_incidence_mat(G: nx.DiGraph, od_list: list, H: nx.DiGraph = None,
     return pli_mat
 
 
-def route_baseline_flows(G: nx.DiGraph, CCWS_filename: str = None, time_window: tuple = None):
+def route_baseline_flows(G: nx.DiGraph, flow_data_filename: str):
     G = G.copy().to_directed()
 
     # route average flows for given <time_window>
 
-    if CCWS_filename is None:
-        CCWS_filename = 'WB2019_913_Unmasked.csv'
-    # load CCWS file data; index is (<railroad>, <OD SPLC>, <commodity>)
-    flow_df = RR_SPLC_comm_grouping(CCWS_filename, time_window=time_window)
+    # load flow data file; index is (<railroad>, <OD SPLC>, <commodity>)
     rr = G.graph['railroad']
-    flow_df = extract_rr(flow_df, rr)  # filter out specific railroad
+    flow_df = load_flow_data_df_csv(flow_data_filename, rr=rr)
 
     # get set of SPLC codes and a dict to map to nodes in G
     splc_node_dict = splc_to_node(G)
@@ -163,11 +156,15 @@ def route_baseline_flows(G: nx.DiGraph, CCWS_filename: str = None, time_window: 
             flow_df_c = flow_df_c.reset_index()
             flow_df_c.index = flow_df_c['Origin-Destination SPLC']
             # assign the tons of flow for this commodity group to the respective index
-            f[c_idx, :, 0] = [flow_df_c.loc[od_str, 'Expanded Tons'] if od_str in flow_df_c.index else 0
+            # TODO: drop the Time Window column!
+            f[c_idx, :, 0] = [flow_df_c.loc[od_str, 'Tons'] if od_str in flow_df_c.index else 0
                               for od_str in od_str_list]
+            # NEW
+            # for od_str_idx, od_str in enumerate(od_str_list):
+            #     f[c_idx, od_str_idx, 0] = flow_df_c.loc[od_str, 'Tons'] if od_str in flow_df_c.index else 0
         else:
             # assign the tons of flow for this commodity group to the respective index
-            f[c_idx, :, 0] = [flow_df_c['Expanded Tons'] if od_str == flow_df_c['Origin-Destination SPLC'] else 0
+            f[c_idx, :, 0] = [flow_df_c['Tons'] if od_str == flow_df_c['Origin-Destination SPLC'] else 0
                               for od_str in od_str_list]
         # increment the TOTAL comm group sum
         f[comm_idx_dict['TOTAL'], :, 0] += f[c_idx, :, 0]
@@ -181,7 +178,7 @@ def route_baseline_flows(G: nx.DiGraph, CCWS_filename: str = None, time_window: 
     rr_v = load_railroad_values().loc[rr]  # railroad energy intensity statistics
     cf = load_conversion_factors()['Value']  # numerical constants for conversion across units
     # arrays ordered in same order as <comm_list> and stored as np arrays for vectorization
-    rr_tc = load_railroad_comm_ton_car().loc[rr][comm_list[:-1]].to_numpy()  # tons/car by commodity for rr
+    rr_tc = rr_v['ton/car']  # tons/car
     comm_er = load_comm_energy_ratios()['Weighted ratio'][comm_list[:-1]].to_numpy()  # commodity energy ratios
 
     # tonmi2kwh = btu/ton-mi * kWh/btu * <energy_efficiency> * <energy_loss> = kWh/ton-mi- not adjusted by commodity
@@ -229,46 +226,24 @@ def route_baseline_flows(G: nx.DiGraph, CCWS_filename: str = None, time_window: 
     return G
 
 
-def route_peak_avg_flows(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D: float, CCWS_filename: str = None,
-                         freq: str = 'M', reroute=True, switch_tech=False, max_reroute_inc: float = None):
+def route_peak_avg_flows(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D: float, flow_data_filename: str,
+                         year: int = None, freq: str = 'M',
+                         reroute=True, switch_tech=False, max_reroute_inc: float = None):
     G = G.copy().to_directed()
 
-    if CCWS_filename is None:
-        CCWS_filename = 'WB2019_913_Unmasked.csv'
-    year = CCWS_filename[2:6]
-    if 'W' in freq:
-        if len(freq) == 1:
-            mult = str(7)
-        else:
-            mult = str(int(freq[:-1]) * 7)
-        tw_start = [datetime_to_mmddyyyy(dt)
-                    for dt in pd.date_range(start=year + '-01-01', end=year + '-12-31', freq=mult + 'D')]
-        tw_end = [datetime_to_mmddyyyy(dt)
-                  for dt in
-                  pd.date_range(start=str(int(year) - 1) + '-12-31', end=year + '-12-30', freq=mult + 'D')]
-    else:
-        # format each <time_window> to match CCWS format 'mmddyyyy'
-        tw_start = [datetime_to_mmddyyyy(dt)
-                    for dt in pd.date_range(start=year + '-01-01', end=year + '-12-31', freq=freq + 'S')]
-        tw_end = [datetime_to_mmddyyyy(dt)
-                  for dt in pd.date_range(start=year + '-01-01', end=year + '-12-31', freq=freq)]
-    time_window_list = [(tw_start[i], tw_end[i]) for i in range(len(tw_start))]
-
-    date_tw_dict = dict()
-    tw_len_dict = dict()
-    for s, e in time_window_list:
-        dates = [datetime_to_mmddyyyy(dt) for dt in
-                 pd.date_range(start=mmddyyyy_to_datetime(s), end=mmddyyyy_to_datetime(e))]
-        date_tw_dict.update({dt: 'S' + s + 'E' + e for dt in dates})
-        tw_len_dict['S' + s + 'E' + e] = len(dates)
-    total_tw_len = sum(tw_len_dict.values())  # total length of all time windows
-
+    rr = G.graph['railroad']
     t0 = time.time()
     # load grouped OD flow data
-    flow_df = RR_SPLC_comm_date_grouping(filename=CCWS_filename, time_window_list=time_window_list)
-    rr = G.graph['railroad']
-    flow_df = extract_rr(flow_df, rr)  # filter out specific railroad
-    # print('\t DATA LOADING:: %s seconds ---' % round(time.time() - t0, 3))
+    flow_df = load_flow_data_date_df_csv(filename=flow_data_filename, rr=rr)
+    time_window_list = list(set(flow_df.index.get_level_values(2)))
+    time_window_list_tuples = [(tw[1:9], tw[10:]) for tw in time_window_list]
+
+    tw_len_dict = dict()
+    for s, e in time_window_list_tuples:
+        tw_len_dict['S' + s + 'E' + e] = len(pd.date_range(start=mmddyyyy_to_datetime(s), end=mmddyyyy_to_datetime(e)))
+    total_tw_len = sum(tw_len_dict.values())  # total length of all time windows
+
+    print('\t DATA LOADING:: %s seconds ---' % round(time.time() - t0, 3))
 
     # get set of SPLC codes and a dict to map to nodes in G
     splc_node_dict = splc_to_node(G)
@@ -305,10 +280,10 @@ def route_peak_avg_flows(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D: float,
     #   - each OD pair
 
     t0 = time.time()
-    f = np.zeros((len(comm_list), len(time_window_list) + 1, len(od_list), 1))
+    f = np.zeros((len(comm_list), len(time_window_list_tuples) + 1, len(od_list), 1))
     # for each time window
-    for tw_idx in range(len(time_window_list)):
-        s, e = time_window_list[tw_idx]
+    for tw_idx in range(len(time_window_list_tuples)):
+        s, e = time_window_list_tuples[tw_idx]
         # convert tw to the format in flow_df.index
         tw_str = 'S' + s + 'E' + e
         # average weight for this time window; for computing average ton flows over all time periods
@@ -322,7 +297,7 @@ def route_peak_avg_flows(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D: float,
             flow_df_c_tw = flow_df_c_tw.loc[(c, tw_str)].reset_index()
             flow_df_c_tw.index = flow_df_c_tw['Origin-Destination SPLC']
             # assign the tons of flow for this commodity group to the respective index
-            f[c_idx, tw_idx, :, 0] = [flow_df_c_tw.loc[od_str, 'Expanded Tons'] if od_str in flow_df_c_tw.index else 0
+            f[c_idx, tw_idx, :, 0] = [flow_df_c_tw.loc[od_str, 'Tons'] if od_str in flow_df_c_tw.index else 0
                                       for od_str in od_str_list]
             # increment the TOTAL comm group sum
             f[comm_idx_dict['TOTAL'], tw_idx, :, 0] += f[c_idx, tw_idx, :, 0]
@@ -331,8 +306,8 @@ def route_peak_avg_flows(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D: float,
     print('\t OD FLOW EXTRACTION:: %s seconds ---' % round(time.time() - t0, 3))
 
     t0 = time.time()
-    x = np.zeros((3, len(comm_list), len(time_window_list) + 1, len(edges_G), 1))
-    for tw_idx in range(len(time_window_list) + 1):
+    x = np.zeros((3, len(comm_list), len(time_window_list_tuples) + 1, len(edges_G), 1))
+    for tw_idx in range(len(time_window_list_tuples) + 1):
         for c_idx in range(len(comm_list)):
             # (0) Baseline network flows
             x[0, c_idx, tw_idx, :, :] = np.dot(pli_mat[0, :, :], f[c_idx, tw_idx, :, :])
@@ -348,7 +323,7 @@ def route_peak_avg_flows(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D: float,
     # load rr specific values
     rr_v = load_railroad_values().loc[rr]
     # arrays ordered in same order as <comm_list> and stored as np arrays for vectorization
-    rr_tc = load_railroad_comm_ton_car().loc[rr][comm_list[:-1]].to_numpy()  # tons/car by commodity for rr
+    rr_tc = rr_v['ton/car']  # tons/car
     comm_er = load_comm_energy_ratios()['Weighted ratio'][comm_list[:-1]].to_numpy()  # commodity energy ratios
 
     # tonmi2kwh = btu/ton-mi * kWh/btu * <energy_correction> * <energy_efficiency> * <energy_loss> =
@@ -549,44 +524,21 @@ def route_peak_avg_flows(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D: float,
     return G, H
 
 
-def route_peak_avg_flows_hybrid(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D: float, CCWS_filename: str = None,
-                                freq: str = 'M', reroute=True, switch_tech=False, max_reroute_inc: float = None):
+def route_peak_avg_flows_hybrid(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, flow_data_filename: str = None,
+                                reroute=True, switch_tech=False, max_reroute_inc: float = None):
     G = G.copy().to_directed()
 
-    if CCWS_filename is None:
-        CCWS_filename = 'WB2019_913_Unmasked.csv'
-    year = CCWS_filename[2:6]
-    if 'W' in freq:
-        if len(freq) == 1:
-            mult = str(7)
-        else:
-            mult = str(int(freq[:-1]) * 7)
-        tw_start = [datetime_to_mmddyyyy(dt)
-                    for dt in pd.date_range(start=year + '-01-01', end=year + '-12-31', freq=mult + 'D')]
-        tw_end = [datetime_to_mmddyyyy(dt)
-                  for dt in
-                  pd.date_range(start=str(int(year) - 1) + '-12-31', end=year + '-12-30', freq=mult + 'D')]
-    else:
-        # format each <time_window> to match CCWS format 'mmddyyyy'
-        tw_start = [datetime_to_mmddyyyy(dt)
-                    for dt in pd.date_range(start=year + '-01-01', end=year + '-12-31', freq=freq + 'S')]
-        tw_end = [datetime_to_mmddyyyy(dt)
-                  for dt in pd.date_range(start=year + '-01-01', end=year + '-12-31', freq=freq)]
-    time_window_list = [(tw_start[i], tw_end[i]) for i in range(len(tw_start))]
+    rr = G.graph['railroad']
+    # load grouped OD flow data
+    flow_df = load_flow_data_date_df_csv(filename=flow_data_filename, rr=rr)
+    time_window_list = list(set(flow_df.index.get_level_values(2)))
+    time_window_list_tuples = [(tw[1:9], tw[10:]) for tw in time_window_list]
 
-    date_tw_dict = dict()
     tw_len_dict = dict()
-    for s, e in time_window_list:
-        dates = [datetime_to_mmddyyyy(dt) for dt in
-                 pd.date_range(start=mmddyyyy_to_datetime(s), end=mmddyyyy_to_datetime(e))]
-        date_tw_dict.update({dt: 'S' + s + 'E' + e for dt in dates})
-        tw_len_dict['S' + s + 'E' + e] = len(dates)
+    for s, e in time_window_list_tuples:
+        tw_len_dict['S' + s + 'E' + e] = len(pd.date_range(start=mmddyyyy_to_datetime(s), end=mmddyyyy_to_datetime(e)))
     total_tw_len = sum(tw_len_dict.values())  # total length of all time windows
 
-    # load grouped OD flow data
-    flow_df = RR_SPLC_comm_date_grouping(filename=CCWS_filename, time_window_list=time_window_list)
-    rr = G.graph['railroad']
-    flow_df = extract_rr(flow_df, rr)  # filter out specific railroad
     # print('\t DATA LOADING:: %s seconds ---' % round(time.time() - t0, 3))
 
     # get set of SPLC codes and a dict to map to nodes in G
@@ -615,10 +567,10 @@ def route_peak_avg_flows_hybrid(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D:
     #   - each OD pair
 
     t0 = time.time()
-    f = np.zeros((len(comm_list), len(time_window_list) + 1, len(od_list), 1))
+    f = np.zeros((len(comm_list), len(time_window_list_tuples) + 1, len(od_list), 1))
     # for each time window
-    for tw_idx in range(len(time_window_list)):
-        s, e = time_window_list[tw_idx]
+    for tw_idx in range(len(time_window_list_tuples)):
+        s, e = time_window_list_tuples[tw_idx]
         # convert tw to the format in flow_df.index
         tw_str = 'S' + s + 'E' + e
         # average weight for this time window; for computing average ton flows over all time periods
@@ -632,7 +584,7 @@ def route_peak_avg_flows_hybrid(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D:
             flow_df_c_tw = flow_df_c_tw.loc[(c, tw_str)].reset_index()
             flow_df_c_tw.index = flow_df_c_tw['Origin-Destination SPLC']
             # assign the tons of flow for this commodity group to the respective index
-            f[c_idx, tw_idx, :, 0] = [flow_df_c_tw.loc[od_str, 'Expanded Tons'] if od_str in flow_df_c_tw.index else 0
+            f[c_idx, tw_idx, :, 0] = [flow_df_c_tw.loc[od_str, 'Tons'] if od_str in flow_df_c_tw.index else 0
                                       for od_str in od_str_list]
             # increment the TOTAL comm group sum
             f[comm_idx_dict['TOTAL'], tw_idx, :, 0] += f[c_idx, tw_idx, :, 0]
@@ -641,8 +593,8 @@ def route_peak_avg_flows_hybrid(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D:
     print('\t OD FLOW EXTRACTION:: %s seconds ---' % round(time.time() - t0, 3))
 
     t0 = time.time()
-    x = np.zeros((3, len(comm_list), len(time_window_list) + 1, len(edges_G), 1))
-    for tw_idx in range(len(time_window_list) + 1):
+    x = np.zeros((3, len(comm_list), len(time_window_list_tuples) + 1, len(edges_G), 1))
+    for tw_idx in range(len(time_window_list_tuples) + 1):
         for c_idx in range(len(comm_list)):
             # (0) Baseline network flows
             x[0, c_idx, tw_idx, :, :] = np.dot(pli_mat[0, :, :], f[c_idx, tw_idx, :, :])
@@ -659,7 +611,7 @@ def route_peak_avg_flows_hybrid(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D:
     # load rr specific values
     rr_v = load_railroad_values().loc[rr]
     # arrays ordered in same order as <comm_list> and stored as np arrays for vectorization
-    rr_tc = load_railroad_comm_ton_car().loc[rr][comm_list[:-1]].to_numpy()  # tons/car by commodity for rr
+    rr_tc = rr_v['ton/car']  # tons/car
     comm_er = load_comm_energy_ratios()['Weighted ratio'][comm_list[:-1]].to_numpy()  # commodity energy ratios
     hybrid_ei = load_hybrid_energy_intensity_values()  # hybrid energy intensities
     h_diesel_ei = dict(zip(hybrid_ei.index, hybrid_ei['diesel ' + hybrid_ratio + ' (btu/ton-mi)']))
@@ -682,7 +634,6 @@ def route_peak_avg_flows_hybrid(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D:
     #         tonmi2energy = (rr_v['Energy intensity (btu/ton-mi)'] * (1 / cf['btu/kgh2']) *
     #                         (1 / rr_v['Energy correction factor']) * (1 / ft_ef['Efficiency factor']) * (1 / ft_ef['Loss']))
 
-    # TODO: fix batt_p_loco param to 1 for hybrid technology
     # battery locomotive range given from D used to calculate battery locomotive energy capacity
     # loc2energy_factor = ton/loc * km * mi/km = ton-mi/loc
     # btu2loc = kwh/btu * batt/kwh * 1 loc/batt = loc/btu
@@ -905,54 +856,14 @@ def route_peak_avg_flows_hybrid(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D:
     return G, H
 
 
-'''
-DEPLOYMENT PERCENTAGE METHODS
-'''
-
-
-# def process_flow_df(G: nx.Graph, flow_df: pd.DataFrame):
-#     rr = G.graph['railroad']
-#     flow_df = extract_rr(flow_df, rr)  # filter out specific railroad
-#     # reset index to only O-D pair for now
-#     flow_df.reset_index(level=['Commodity Group Name', 'Waybill Date (mmddccyy)'], inplace=True)
-#     # get set of SPLC codes and a dict to map to nodes in G
-#     splc_node_dict = splc_to_node(G)
-#     # filter out OD pairs that are not in the splc_node_dict keys
-#     splc_set = set(splc_node_dict.keys())
-#     flow_df = flow_df.loc[[i for i in flow_df.index if i[1:7] in splc_set and i[7:] in splc_set]]
-#
-#     flow_df.reset_index(level=['Origin-Destination SPLC'], inplace=True)
-#     flow_df['idx'] = flow_df.index
-#     tons = flow_df['Expanded Tons'].to_dict()
-#     # load miles b/w all OD pairs (by nodeid) from json or compute if does not exist
-#     filepath_sp_dict = os.path.join(NX_DIR, rr + '_SP_dict_miles.json')
-#     if os.path.exists(filepath_sp_dict):
-#         miles = load_dict_from_json(filepath_sp_dict)
-#     else:
-#         miles = dict(nx.all_pairs_bellman_ford_path_length(G=G, weight='miles'))
-#         dict_to_json(miles, filepath_sp_dict)
-#
-#     flow_df['Expanded Ton-Miles Routed'] = \
-#         flow_df['idx'].apply(lambda x: tons[x] *
-#                                        miles[splc_node_dict[flow_df.loc[x, 'Origin-Destination SPLC'][1:7]]]
-#                                        [splc_node_dict[flow_df.loc[x, 'Origin-Destination SPLC'][7:]]])
-#
-#     flow_df = flow_df.groupby(by=['Origin-Destination SPLC', 'Commodity Group Name', 'Waybill Date (mmddccyy)']).sum(
-#         numeric_only=True)[['Expanded Ton-Miles Routed']]
-#     flow_df.rename(columns={'Expanded Ton-Miles Routed': 'Expanded Ton-Miles'}, inplace=True)
-#
-#     return flow_df
-
-
-def ods_by_perc_ton_mi(G: nx.DiGraph, perc_ods: float, CCWS_filename: str = None, time_window: tuple = None,
-                       od_flows_truncate=False):
+def ods_by_perc_ton_mi(G: nx.DiGraph, flow_data_filename: str):
     """
 
     Parameters
     ----------
     G
     perc_ods
-    CCWS_filename
+    flow_data_filename
     time_window
 
     Returns
@@ -962,16 +873,11 @@ def ods_by_perc_ton_mi(G: nx.DiGraph, perc_ods: float, CCWS_filename: str = None
     # return O-D pairs in CCWS tha provide ton flows >= <perc_ods> * total CCWS ton flows
     # od_flows is average daily ton-miles
 
-    if CCWS_filename is None:
-        CCWS_filename = FILES[2019]
-
     # load dict that maps SPLC codes to node_ids in G
     splc_node_dict = splc_to_node(G)
     # load grouped OD flow data
-    flow_df = RR_SPLC_comm_grouping(filename=CCWS_filename, time_window=time_window)
-    # filter out specific railroad
     rr = G.graph['railroad']
-    flow_df = extract_rr(flow_df, rr)
+    flow_df = load_flow_data_df_csv(filename=flow_data_filename, rr=rr)
     # only index needed is the OD pair
     flow_df.reset_index(level='Commodity Group Name', inplace=True)
     # filter out OD pairs that are not in the splc_node_dict keys
@@ -995,9 +901,9 @@ def ods_by_perc_ton_mi(G: nx.DiGraph, perc_ods: float, CCWS_filename: str = None
                                                                                     (splc_node_dict[x[1:7]],
                                                                                      splc_node_dict[x[7:]]))
 
-    flow_df = flow_df.groupby(by=['Origin-Destination nodeid']).sum(numeric_only=True)[['Expanded Tons']]
+    flow_df = flow_df.groupby(by=['Origin-Destination nodeid']).sum(numeric_only=True)[['Tons']]
     flow_df['Origin-Destination nodeid'] = flow_df.index
-    tons = flow_df['Expanded Tons'].to_dict()
+    tons = flow_df['Tons'].to_dict()
     # load from json or compute if does not exist
     filepath_sp_dict = os.path.join(NX_DIR, rr + '_SP_dict_miles.json')
     if os.path.exists(filepath_sp_dict):
@@ -1005,14 +911,14 @@ def ods_by_perc_ton_mi(G: nx.DiGraph, perc_ods: float, CCWS_filename: str = None
     else:
         miles = dict(nx.all_pairs_bellman_ford_path_length(G=G, weight='miles'))
         dict_to_json(miles, filepath_sp_dict)
-    flow_df['Expanded Ton-Miles Routed'] = flow_df['Origin-Destination nodeid'].apply(lambda x:
+    flow_df['Ton-Miles Routed'] = flow_df['Origin-Destination nodeid'].apply(lambda x:
                                                                                       tons[x] * miles[x[0]][x[1]])
-    flow_df.drop(columns=['Origin-Destination nodeid', 'Expanded Tons'], inplace=True)
+    flow_df.drop(columns=['Origin-Destination nodeid', 'Tons'], inplace=True)
     # group by OD pair nodeid, summing all commodity groupings for the total ton-mile values (over all commodities)
     # keep only dataframe with ton-miles sum
     # flow_df = flow_df.groupby(by=['Origin-Destination nodeid']).sum(numeric_only=True)[['Expanded Ton-Miles Routed']]
     # sort OD pairs by ton-miles in descending order
-    flow_df.sort_values(by='Expanded Ton-Miles Routed', ascending=False, inplace=True)
+    flow_df.sort_values(by='Ton-Miles Routed', ascending=False, inplace=True)
 
     # write to csv
     # flow_df_nodeids = flow_df
@@ -1022,50 +928,9 @@ def ods_by_perc_ton_mi(G: nx.DiGraph, perc_ods: float, CCWS_filename: str = None
     # flow_df_nodeids.to_csv('/Users/adrianhz/Desktop/OD_flows_USA1.csv')
 
     # compute cumulative percentage of the ton-miles
-    flow_df['Cumulative Percent Ton-Miles'] = flow_df.cumsum() / flow_df.sum()
-    # select the subset of OD pairs that provides a cumulative percentage of ton-miles >= <perc_ods>
-    m = flow_df[flow_df['Cumulative Percent Ton-Miles'] >= perc_ods]['Cumulative Percent Ton-Miles'].min()
-    if m is np.NAN:
-        m = 1
-    ods = list(flow_df[flow_df['Cumulative Percent Ton-Miles'] <= m].index)
+    ods = list(flow_df.index)
     # convert OD pair strings into node_id pair tuples
     # get O-D flows for all O-D pairs as a dict
-    od_flows = flow_df['Expanded Ton-Miles Routed'].to_dict()
-    if od_flows_truncate:
-        od_flows = {od: od_flows[od] for od in ods}
+    od_flows = flow_df['Ton-Miles Routed'].to_dict()
 
     return ods, od_flows
-
-
-'''
-PLOT
-'''
-
-
-def plot_flows(G: nx.DiGraph, comm_flow: str = None, max_linewidth: int = None, crs: str = 'EPSG:4326'):
-    # for plotting individual commodity flows on edges
-    if comm_flow is None:
-        # use total flow
-        comm_flow = 'flow'
-    if max_linewidth is None:
-        # use 4
-        max_linewidth = 4
-
-    if comm_flow[:len(comm_flow) - len('_emissions')] in {'diesel', 'biodiesel', 'e-fuel'}:
-        title = G.graph['railroad'] + ' Emissions Density on Network for ' + \
-                comm_flow[:len(comm_flow) - len('_emissions')].capitalize() + ' Deployment'
-    elif comm_flow == 'flow':
-        title = G.graph['railroad'] + ' Flow Density on Network'
-    else:
-        title = G.graph['railroad'] + ' ' + comm_flow[len('flow_'):].capitalize() + \
-                ' Flow Density on Network'
-
-    edge_kwds = {'color': 'g', 'linewidth': (comm_flow, max_linewidth)}
-    ax = plot_graph(G, plot_nodes=False, edge_kwds=edge_kwds, title=title, crs=crs)
-
-    f = G.graph['railroad'] + '_' + comm_flow[:len(comm_flow) - len('_emissions')] + '.svg'
-    f = os.path.join('/Users/adrianhz/Library/CloudStorage/OneDrive-NorthwesternUniversity/'
-                     'Adrian Hernandez/ARPA-E LOCOMOTIVES/Network Model', f)
-    plt.savefig(f, format="svg")
-
-    return ax

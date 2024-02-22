@@ -1,4 +1,4 @@
-import time
+import numpy as np
 
 from util import *
 # MODULES
@@ -16,19 +16,15 @@ f = plot_facility_nx_size(G)
 # global color assignment
 # blue, red, orange, green, purple, teal, pink, olive, darkred, darkblue = plotly.colors.qualitative.G10
 # '#8E77B2', '#F9F7FB'; mid purple, light purple
-purple, mid_purple, light_purple, green1, green2, green3, green4, green5, red, light_red, black = ['#512D88', '#DAD0E6',
-                                                                                                   '#ECE6F4', '#9AD470',
-                                                                                                   '#75D431', '#719B52',
-                                                                                                   '#4A871F', '#2E5413',
-                                                                                                   '#FF3033', '#FF787A',
-                                                                                                   '#18141C']
+[purple, mid_purple, light_purple,
+ green1, green2, green3, green4, green5,
+ red, light_red, black] = ['#512D88', '#DAD0E6', '#ECE6F4',
+                           '#9AD470', '#75D431', '#719B52', '#4A871F', '#2E5413',
+                           '#FF3033', '#FF787A', '#18141C']
 
 '''
 MASTER PLOT
 '''
-
-
-# TODO: edit hovertext labels and table info
 
 
 def plot_scenario(G: nx.DiGraph, fuel_type: str, deployment_perc: float, comm_group: str = None,
@@ -48,8 +44,6 @@ def plot_scenario(G: nx.DiGraph, fuel_type: str, deployment_perc: float, comm_gr
                                  additional_plots=additional_plots, figlist=figlist, fig=fig, figshow=figshow,
                                  legend_show=legend_show)
 
-    # TODO: do we want this?
-    # TODO: temporary disabled for card testing
     # if cache_fig:
     #     cache_plot(fig, codified_name)
 
@@ -704,7 +698,6 @@ def battery_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist
         #     legend_bool[0] = False
         # continue
 
-        # TODO: format nicely see: https://plotly.com/python/hover-text-and-formatting/
         if n['facility'] == 1:
             if n['avg']['energy_transfer'] == 1:
                 avg_charged_mwh = -n['avg']['daily_demand_mwh']
@@ -738,7 +731,6 @@ def battery_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist
                        'Total Daily Delay Cost: \t $' + \
                        str(round(n['energy_source_TEA']['total_daily_delay_cost'] / 1e3, 2)) + ' K<br>'
             else:
-                # TODO: correct this
                 text = n['city'] + ', ' + n['state'] + '<br>' + \
                        str(round(avg_charged_mwh, 2)) + ' MWh/day <br>' + \
                        str(int(n['avg']['number_loc'])) + ' loc/day <br>' + \
@@ -1278,11 +1270,6 @@ def battery_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist
 
     return fig, labels
 
-
-# TODO: update for hybrid
-#  - update parameter inputs for hybrid scenario (e.g., hybrid ratio, inter-facility distance, battery capacity)
-#  - do not require pre-processing and caching if scenario is for hybrid deployment
-#  - test run
 
 def hybrid_pie_operations_plot(G, comm_group: str, fig=None):
     if fig is None:
@@ -1880,7 +1867,6 @@ def hybrid_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist=
                        'Total Daily Delay Cost: \t $' + \
                        str(round(n['energy_source_TEA']['total_daily_delay_cost'] / 1e3, 2)) + ' K<br>'
             else:
-                # TODO: correct this
                 text = n['city'] + ', ' + n['state'] + '<br>' + \
                        str(round(avg_charged_mwh, 2)) + ' MWh/day <br>' + \
                        str(int(n['avg']['number_loc'])) + ' loc/day <br>' + \
@@ -2936,6 +2922,8 @@ def hydrogen_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlis
     edges_gdf['share_hydrogen'] = 100 * edges_gdf['hydrogen_avg_ton'].div(edges_gdf['support_diesel_avg_ton'] +
                                                                           edges_gdf['hydrogen_avg_ton']).replace(np.inf,
                                                                                                                  0.00)
+    edges_gdf['share_hydrogen'] = edges_gdf['share_hydrogen'].replace(np.NAN, 0.00)
+
     # assign line width to each edge based on hydrogen flow tonnage
     edges_gdf['line_width'] = edges_gdf['hydrogen_avg_ton'].apply(lambda x: line_size(x))
     # reset index
@@ -3055,7 +3043,6 @@ def hydrogen_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlis
     legend_bool = [True, True]
     for i in range(len(nodes_gdf)):
         n = nodes_gdf.loc[nodes_gdf.index[i]]
-        # TODO: format nicely see: https://plotly.com/python/hover-text-and-formatting/
         if n['facility'] == 1:
             if n['avg']['energy_transfer'] == 1:
                 avg_pumped_kgh2 = -n['avg']['daily_demand_kgh2']

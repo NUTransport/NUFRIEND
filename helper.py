@@ -1,8 +1,3 @@
-import os
-
-import networkx as nx
-import pandas as pd
-
 from util import *
 
 
@@ -14,49 +9,51 @@ GENERAL
 def extract_rr(df: pd.DataFrame, rr: str, forecast=False):
     # extract rows with data for rr from df
 
-    if forecast:
-        agg_fxn = {'Expanded Number of Samples': np.sum, 'Expanded Tons': np.sum, 'Expanded Carloads': np.sum,
-                   'Expanded Trailer/Container Count': np.sum, 'Expanded Ton-Miles': np.sum,
-                   'Expanded Car-Miles': np.sum,
-                   'Expanded Container-Miles': np.sum, 'Total Distance Mean': np.mean,
-                   'Total Distance Standard Deviation': np.std, 'Total Distance Max': np.max,
-                   'Total Distance Min': np.min,
-                   '2020 Expanded Tons': np.sum, '2020 Expanded Ton-Miles': np.sum,
-                   '2023 Expanded Tons': np.sum, '2023 Expanded Ton-Miles': np.sum,
-                   '2025 Expanded Tons': np.sum, '2025 Expanded Ton-Miles': np.sum,
-                   '2030 Expanded Tons': np.sum, '2030 Expanded Ton-Miles': np.sum,
-                   '2035 Expanded Tons': np.sum, '2035 Expanded Ton-Miles': np.sum,
-                   '2040 Expanded Tons': np.sum, '2040 Expanded Ton-Miles': np.sum,
-                   '2045 Expanded Tons': np.sum, '2045 Expanded Ton-Miles': np.sum,
-                   '2050 Expanded Tons': np.sum, '2050 Expanded Ton-Miles': np.sum}
-    else:
-        agg_fxn = {'Expanded Number of Samples': np.sum, 'Expanded Tons': np.sum, 'Expanded Carloads': np.sum,
-                   'Expanded Trailer/Container Count': np.sum, 'Expanded Ton-Miles': np.sum,
-                   'Expanded Car-Miles': np.sum,
-                   'Expanded Container-Miles': np.sum, 'Total Distance Mean': np.mean,
-                   'Total Distance Standard Deviation': np.std, 'Total Distance Max': np.max,
-                   'Total Distance Min': np.min}
+    # if forecast:
+    #     agg_fxn = {'Expanded Number of Samples': np.sum, 'Expanded Tons': np.sum, 'Expanded Carloads': np.sum,
+    #                'Expanded Trailer/Container Count': np.sum, 'Expanded Ton-Miles': np.sum,
+    #                'Expanded Car-Miles': np.sum,
+    #                'Expanded Container-Miles': np.sum, 'Total Distance Mean': np.mean,
+    #                'Total Distance Standard Deviation': np.std, 'Total Distance Max': np.max,
+    #                'Total Distance Min': np.min,
+    #                '2020 Expanded Tons': np.sum, '2020 Expanded Ton-Miles': np.sum,
+    #                '2023 Expanded Tons': np.sum, '2023 Expanded Ton-Miles': np.sum,
+    #                '2025 Expanded Tons': np.sum, '2025 Expanded Ton-Miles': np.sum,
+    #                '2030 Expanded Tons': np.sum, '2030 Expanded Ton-Miles': np.sum,
+    #                '2035 Expanded Tons': np.sum, '2035 Expanded Ton-Miles': np.sum,
+    #                '2040 Expanded Tons': np.sum, '2040 Expanded Ton-Miles': np.sum,
+    #                '2045 Expanded Tons': np.sum, '2045 Expanded Ton-Miles': np.sum,
+    #                '2050 Expanded Tons': np.sum, '2050 Expanded Ton-Miles': np.sum}
+    # else:
+    #     agg_fxn = {'Expanded Number of Samples': np.sum, 'Expanded Tons': np.sum, 'Expanded Carloads': np.sum,
+    #                'Expanded Trailer/Container Count': np.sum, 'Expanded Ton-Miles': np.sum,
+    #                'Expanded Car-Miles': np.sum,
+    #                'Expanded Container-Miles': np.sum, 'Total Distance Mean': np.mean,
+    #                'Total Distance Standard Deviation': np.std, 'Total Distance Max': np.max,
+    #                'Total Distance Min': np.min}
     # # apply aggregation function
     # return df_class1.agg(agg_fxn)
 
-    if rr != 'WCAN' and rr != 'EAST' and rr != 'USA1':
-        return df.loc[rr]
+    # if rr != 'WCAN' and rr != 'EAST' and rr != 'USA1':
+    #     return df.loc[rr]
+    #
+    # if rr == 'WCAN':
+    #     rrs = ['BNSF', 'CP', 'CN']
+    # elif rr == 'EAST':
+    #     rrs = ['CSXT', 'NS', 'KCS']
+    # elif rr == 'USA1':
+    #     rrs = ['BNSF', 'NS', 'KCS']
+    #
+    # orig_idx_names = list(df.index.names)
+    # orig_idx_names.remove('Railroad')
+    # # df.reset_index(level=list(set(orig_idx_names).difference({'Railroad'})), inplace=True)
+    # df.rename(index={r: rr for r in rrs}, level='Railroad', inplace=True)
+    # df = df.loc[rr]
+    # # df.groupby(by=orig_idx_names).agg(agg_fxn)
+    # # apply aggregation function
+    # return df.groupby(by=orig_idx_names).sum()
 
-    if rr == 'WCAN':
-        rrs = ['BNSF', 'CP', 'CN']
-    elif rr == 'EAST':
-        rrs = ['CSXT', 'NS', 'KCS']
-    elif rr == 'USA1':
-        rrs = ['BNSF', 'NS', 'KCS']
-
-    orig_idx_names = list(df.index.names)
-    orig_idx_names.remove('Railroad')
-    # df.reset_index(level=list(set(orig_idx_names).difference({'Railroad'})), inplace=True)
-    df.rename(index={r: rr for r in rrs}, level='Railroad', inplace=True)
-    df = df.loc[rr]
-    # df.groupby(by=orig_idx_names).agg(agg_fxn)
-    # apply aggregation function
-    return df.groupby(by=orig_idx_names).agg(agg_fxn)
+    return df.loc[rr]
 
 
 def gurobi_suppress_output(suppress_output=True):
@@ -159,10 +156,6 @@ def load_railroad_loc_car_train():
     return pd.read_csv(os.path.join(RR_DIR, 'railroad_loc_car_train.csv'), header=0, index_col='Railroad')
 
 
-def load_railroad_comm_ton_car():
-    return pd.read_csv(os.path.join(FLOW_DIR, 'WB2019_tons_per_car_rr_comm.csv'), header=0, index_col='Railroad')
-
-
 def load_conversion_factors():
     """
     Currently have as indices:
@@ -191,6 +184,34 @@ def load_efuel_prices_mp():
 def load_hybrid_energy_intensity_values():
     # in btu/ton-mi
     return pd.read_csv(os.path.join(GEN_DIR, 'hybrid_energy_intensity_values.csv'), header=0, index_col='alignment')
+
+
+# FLOW DATA
+
+
+def load_flow_data_df_csv(filename: str, rr: str):
+
+    df = pd.read_csv(os.path.join(FLOW_DIR, filename), header=0,
+                     index_col=['Railroad', 'Origin-Destination SPLC', 'Commodity Group Name'])
+
+    df.drop(columns=list(set(df.columns).difference({'Tons'})), inplace=True)
+
+    df = df.groupby(by=['Railroad', 'Origin-Destination SPLC', 'Commodity Group Name']).sum()
+
+    df = extract_rr(df, rr)  # filter out specific railroad
+
+    return df
+
+
+def load_flow_data_date_df_csv(filename: str, rr: str):
+
+    df = pd.read_csv(os.path.join(FLOW_DIR, filename), header=0,
+                     index_col=['Railroad', 'Origin-Destination SPLC',
+                                'Commodity Group Name', 'Time Window (SmmddccyyEmmddccyy)'])
+
+    df = extract_rr(df, rr)  # filter out specific railroad
+
+    return df
 
 
 '''
@@ -539,11 +560,6 @@ def elec_rate_state_mp(G: nx.DiGraph, year: str):
         elec_rate_dict[n] = 10 * df_state.loc[G.nodes[n]['state']]  # 10 * ¢/kWh == $/MWh
 
     return elec_rate_dict
-
-
-'''
-flow_data_processing.py
-'''
 
 
 def mmddyyyy_to_datetime(mmddyyyy: str):
