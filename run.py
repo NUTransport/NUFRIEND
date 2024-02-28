@@ -100,7 +100,7 @@ def run_scenario_file(scenario_code: str, G: nx.DiGraph = None, plot=True, load_
             actual_dep_perc = G.graph['operations']['deployment_perc'][comm_group]
             G.graph['scenario']['actual_deployment_perc'] = actual_dep_perc
             # 5.1. TEA
-            G = tea_battery_all_facilities(G, max_util=max_util, station_type=station_type)
+            G = tea_battery_all_facilities(G, max_util=max_util)
             # baseline and other dropin fuels (easy factor calculation)
             G = tea_dropin(G=G, fuel_type='diesel', deployment_perc=1, scenario_fuel_type=fuel_type)
             # G = tea_dropin(G, fuel_type='biodiesel', deployment_perc=actual_dep_perc, scenario_fuel_type=fuel_type)
@@ -447,9 +447,8 @@ def update_graph_values(G: nx.DiGraph, fuel_type: str, max_util: float, station_
         print('LCA2:: ' + str(time.time() - t0))
 
         t0 = time.time()
-        G = tea_battery_all_facilities(G, max_util=max_util, station_type=station_type,
-                                       clean_energy_cost=clean_energy_cost, tender_cost_p_tonmi=tender_cost_p_tonmi,
-                                       diesel_cost_p_gal=diesel_cost_p_gal)
+        G = tea_battery_all_facilities(G, max_util=max_util, clean_energy_cost=clean_energy_cost,
+                                       tender_cost_p_tonmi=tender_cost_p_tonmi, diesel_cost_p_gal=diesel_cost_p_gal)
         G = tea_dropin(G, fuel_type='diesel', deployment_perc=1, scenario_fuel_type=fuel_type,
                        diesel_cost_p_gal=diesel_cost_p_gal)
         print('TEA UPDATE:: ' + str(time.time() - t0))

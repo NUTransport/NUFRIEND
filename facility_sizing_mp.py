@@ -20,7 +20,7 @@ GRAPH PREPROCESSING
 '''
 
 
-def facility_sizing_mp(G: nx.DiGraph, time_horizon: list, fuel_type: str, D: float, unit_sizing_obj=False,
+def facility_sizing_mp(G: nx.DiGraph, time_horizon: list, fuel_type: str, range_km: float, unit_sizing_obj=False,
                        emissions_obj=False, suppress_output=True):
 
     # instantiate storage dicts
@@ -40,13 +40,13 @@ def facility_sizing_mp(G: nx.DiGraph, time_horizon: list, fuel_type: str, D: flo
 
     # run facility sizing LP for each time period
     for t in time_horizon:
-        G = facility_sizing_step_mp(G=G, time_step=t, fuel_type=fuel_type, D=D, unit_sizing_obj=unit_sizing_obj,
+        G = facility_sizing_step_mp(G=G, time_step=t, fuel_type=fuel_type, range_km=range_km, unit_sizing_obj=unit_sizing_obj,
                                     emissions_obj=emissions_obj, suppress_output=suppress_output)
 
     return G
 
 
-def facility_sizing_step_mp(G: nx.DiGraph, time_step: str, fuel_type: str, D: float, unit_sizing_obj=False,
+def facility_sizing_step_mp(G: nx.DiGraph, time_step: str, fuel_type: str, range_km: float, unit_sizing_obj=False,
                             emissions_obj=False, suppress_output=True):
     """
     Size facilities by energy usage over <time_window> period using flows
@@ -84,7 +84,7 @@ def facility_sizing_step_mp(G: nx.DiGraph, time_step: str, fuel_type: str, D: fl
         cost_p_location = {i: 1 for i in G.nodes}
     else:
         # if <emissions_obj> then cost is in [gCO2/kWh], otherwise, cost is in [$/MWh]
-        cost_p_location = elec_rate_state_mp(G, year=time_step)
+        cost_p_location = elec_rate_state_mp(G, year=time_step, emissions=emissions_obj)
 
     # if isinstance(cost_p_location, float) or isinstance(cost_p_location, int):
     #     c = cost_p_location
@@ -103,7 +103,7 @@ def facility_sizing_step_mp(G: nx.DiGraph, time_step: str, fuel_type: str, D: fl
                         (1 / rr_v['Energy correction factor']) * (1 / ft_ef['Efficiency factor']) * (1 / ft_ef['Loss']))
     # battery locomotive range given from D used to calculate battery locomotive energy capacity
     # loc2kwh = kWh/ton-mi * ton/loc * km * mi/km * loc/batt = kWh/loc
-    loc2energy = tonmi2energy * rr_v['ton/loc'] * D * cf['mi/km']
+    loc2energy = tonmi2energy * rr_v['ton/loc'] * range_km * cf['mi/km']
 
     # 3.2. EDGE AVERAGE FLOW ASSIGNMENT
     key = 'MCNF_avg'
@@ -415,21 +415,6 @@ def hydrogen_facility_sizing(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D: fl
     G.graph[key] = dict(total_energy_mwh=total_energy, total_demand_mwh=- F.nodes[s][key]['d'])
 
     return G
-
-'''
-Problem lies in the tightness of upperbounds, these are not sufficiently large to provide additional energy to nodes 
-that do not have facilities located at them, hence infeasibility. One idea is to simplify this graph further and remove
-those nodes that are not covered facilities. This may be a problem in the routing module. 
-Could make a nodes lb to be the sum of its own plus all subsequent (direction matters) non-facility nodes lb's. 
-E.g., suppose i->j->k where i, k selected facilities and j not selected,
- suppose (i,j)_lb = 10, (j,k)_lb = 10 and (i,j)_ub = 12, then there is no way to satisfy the demand bc of the ub 
- tightness. The lb must take into account future links that do not come from a selected facility. Could sum these bounds
- up for all edges leaving a facility node until another facility node is encountered.
- Use the subgraph_from_interchange_nodes_geo method and include a <kwds_to_sum> param. for the attribute names to sum
- for combined edges (lb and ub), to do this with double nest dict structure, 
- use same principal as f = {k: d[k] + e[k] for k in d.keys() if k in e.keys()} ... does this work???
-
-'''
 
 '''
 MCNF LP SOLVER

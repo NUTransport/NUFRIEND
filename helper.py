@@ -6,52 +6,7 @@ GENERAL
 '''
 
 
-def extract_rr(df: pd.DataFrame, rr: str, forecast=False):
-    # extract rows with data for rr from df
-
-    # if forecast:
-    #     agg_fxn = {'Expanded Number of Samples': np.sum, 'Expanded Tons': np.sum, 'Expanded Carloads': np.sum,
-    #                'Expanded Trailer/Container Count': np.sum, 'Expanded Ton-Miles': np.sum,
-    #                'Expanded Car-Miles': np.sum,
-    #                'Expanded Container-Miles': np.sum, 'Total Distance Mean': np.mean,
-    #                'Total Distance Standard Deviation': np.std, 'Total Distance Max': np.max,
-    #                'Total Distance Min': np.min,
-    #                '2020 Expanded Tons': np.sum, '2020 Expanded Ton-Miles': np.sum,
-    #                '2023 Expanded Tons': np.sum, '2023 Expanded Ton-Miles': np.sum,
-    #                '2025 Expanded Tons': np.sum, '2025 Expanded Ton-Miles': np.sum,
-    #                '2030 Expanded Tons': np.sum, '2030 Expanded Ton-Miles': np.sum,
-    #                '2035 Expanded Tons': np.sum, '2035 Expanded Ton-Miles': np.sum,
-    #                '2040 Expanded Tons': np.sum, '2040 Expanded Ton-Miles': np.sum,
-    #                '2045 Expanded Tons': np.sum, '2045 Expanded Ton-Miles': np.sum,
-    #                '2050 Expanded Tons': np.sum, '2050 Expanded Ton-Miles': np.sum}
-    # else:
-    #     agg_fxn = {'Expanded Number of Samples': np.sum, 'Expanded Tons': np.sum, 'Expanded Carloads': np.sum,
-    #                'Expanded Trailer/Container Count': np.sum, 'Expanded Ton-Miles': np.sum,
-    #                'Expanded Car-Miles': np.sum,
-    #                'Expanded Container-Miles': np.sum, 'Total Distance Mean': np.mean,
-    #                'Total Distance Standard Deviation': np.std, 'Total Distance Max': np.max,
-    #                'Total Distance Min': np.min}
-    # # apply aggregation function
-    # return df_class1.agg(agg_fxn)
-
-    # if rr != 'WCAN' and rr != 'EAST' and rr != 'USA1':
-    #     return df.loc[rr]
-    #
-    # if rr == 'WCAN':
-    #     rrs = ['BNSF', 'CP', 'CN']
-    # elif rr == 'EAST':
-    #     rrs = ['CSXT', 'NS', 'KCS']
-    # elif rr == 'USA1':
-    #     rrs = ['BNSF', 'NS', 'KCS']
-    #
-    # orig_idx_names = list(df.index.names)
-    # orig_idx_names.remove('Railroad')
-    # # df.reset_index(level=list(set(orig_idx_names).difference({'Railroad'})), inplace=True)
-    # df.rename(index={r: rr for r in rrs}, level='Railroad', inplace=True)
-    # df = df.loc[rr]
-    # # df.groupby(by=orig_idx_names).agg(agg_fxn)
-    # # apply aggregation function
-    # return df.groupby(by=orig_idx_names).sum()
+def extract_rr(df: pd.DataFrame, rr: str):
 
     return df.loc[rr]
 
@@ -208,6 +163,21 @@ def load_flow_data_date_df_csv(filename: str, rr: str):
     df = pd.read_csv(os.path.join(FLOW_DIR, filename), header=0,
                      index_col=['Railroad', 'Origin-Destination SPLC',
                                 'Commodity Group Name', 'Time Window (SmmddccyyEmmddccyy)'])
+
+    df = extract_rr(df, rr)  # filter out specific railroad
+
+    return df
+
+
+def load_mp_flow_data_df_csv(filename: str, rr: str, time_horizon: list):
+
+    df = pd.read_csv(os.path.join(FLOW_DIR, filename), header=0,
+                     index_col=['Railroad', 'Origin-Destination SPLC', 'Commodity Group Name'])
+
+    cols_to_keep = [t + ' Tons' for t in time_horizon]
+    df.drop(columns=list(set(df.columns).difference(set(cols_to_keep))), inplace=True)
+
+    df = df.groupby(by=['Railroad', 'Origin-Destination SPLC', 'Commodity Group Name']).sum()
 
     df = extract_rr(df, rr)  # filter out specific railroad
 
@@ -538,14 +508,13 @@ def elec_rate_state(G: nx.DiGraph, emissions=False, clean_elec_prem_dolkwh: floa
         df_state = pd.read_csv(os.path.join(TEA_DIR, filename), header=0, index_col='State')
         elec_rate_dict = dict()
         for n in G:
-            # add in clean electricity premium
-            elec_rate_dict[n] = 10 * (df_state.loc[G.nodes[n]['state'], 'Commercial'] +
-                                      clean_elec_prem_dolkwh * 100)  # 10 * ¢/kWh == $/MWh
+            # add in clean electricity premium; 10 * ¢/kWh == $/MWh
+            elec_rate_dict[n] = 10 * (df_state.loc[G.nodes[n]['state'], 'Commercial'] + clean_elec_prem_dolkwh * 100)
 
     return elec_rate_dict
 
 
-def elec_rate_state_mp(G: nx.DiGraph, year: str):
+def elec_rate_state_mp(G: nx.DiGraph, year: str, emissions=False, clean_elec_prem_dolkwh: float = None):
     # return electricity rate for each node based on state rate in [$/MWh] or in [gC02/kWh] if <emissions>=True
     # NUFRIEND
     # SF Paper
@@ -553,11 +522,21 @@ def elec_rate_state_mp(G: nx.DiGraph, year: str):
     # filename = 'eia_average_electricity_price_state_2020.csv'
 
     # return price by state for <year>
-    df_state = load_tea_battery_lookup_mp(year=year)
-    elec_rate_dict = dict()
-    for n in G:
-        # add in clean electricity premium
-        elec_rate_dict[n] = 10 * df_state.loc[G.nodes[n]['state']]  # 10 * ¢/kWh == $/MWh
+
+    if clean_elec_prem_dolkwh is None:
+        clean_elec_prem_dolkwh = 0
+
+    if emissions:
+        df_state = load_lca_battery_lookup_mp(year=year)
+        elec_rate_dict = dict()
+        for n in G:
+            elec_rate_dict[n] = df_state.loc[G.nodes[n]['state']]   # g/kWh
+    else:
+        df_state = load_tea_battery_lookup_mp(year=year)
+        elec_rate_dict = dict()
+        for n in G:
+            # add in clean electricity premium; 10 * ¢/kWh == $/MWh
+            elec_rate_dict[n] = 10 * (df_state.loc[G.nodes[n]['state']] + clean_elec_prem_dolkwh * 100)
 
     return elec_rate_dict
 

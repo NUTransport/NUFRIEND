@@ -502,7 +502,7 @@ def battery_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist
     # G = project_graph(G.copy(), to_crs=crs)
     t0 = time.time()
     nodes_gdf, edges_gdf = gdfs_from_graph(G, crs=crs, smooth_geometry=False)
-    print('\t GDF EXTRACTION:: ' + str(time.time() - t0))
+    print('GDF EXTRACTION:: ' + str(time.time() - t0))
 
     t0 = time.time()
     # drop non-covered edges
@@ -1738,7 +1738,7 @@ def hybrid_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist=
     # G = project_graph(G.copy(), to_crs=crs)
     t0 = time.time()
     nodes_gdf, edges_gdf = gdfs_from_graph(G, crs=crs, smooth_geometry=False)
-    print('\t GDF EXTRACTION:: ' + str(time.time() - t0))
+    print('GDF EXTRACTION:: ' + str(time.time() - t0))
 
     t0 = time.time()
     # drop non-covered edges

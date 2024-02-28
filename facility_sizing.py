@@ -719,20 +719,6 @@ def hydrogen_facility_sizing(G: nx.DiGraph, H: nx.DiGraph, fuel_type: str, D: fl
 
     return G
 
-'''
-Problem lies in the tightness of upperbounds, these are not sufficiently large to provide additional energy to nodes 
-that do not have facilities located at them, hence infeasibility. One idea is to simplify this graph further and remove
-those nodes that are not covered facilities. This may be a problem in the routing module. 
-Could make a nodes lb to be the sum of its own plus all subsequent (direction matters) non-facility nodes lb's. 
-E.g., suppose i->j->k where i, k selected facilities and j not selected,
- suppose (i,j)_lb = 10, (j,k)_lb = 10 and (i,j)_ub = 12, then there is no way to satisfy the demand bc of the ub 
- tightness. The lb must take into account future links that do not come from a selected facility. Could sum these bounds
- up for all edges leaving a facility node until another facility node is encountered.
- Use the subgraph_from_interchange_nodes_geo method and include a <kwds_to_sum> param. for the attribute names to sum
- for combined edges (lb and ub), to do this with double nest dict structure, 
- use same principal as f = {k: d[k] + e[k] for k in d.keys() if k in e.keys()} ... does this work???
-
-'''
 
 '''
 MCNF LP SOLVER

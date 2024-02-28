@@ -8,7 +8,7 @@ BATTERY
 
 
 def tea_battery(peak_loc: float, avg_loc: float, avg_mwh: float, elec_rate: float,
-                max_util: float = 0.88, station_type: str = None):
+                max_util: float = 0.88):
 
     """
     Calculates the breakdown of LCO into capital, O&M, and energy costs as well as the capital investment,
@@ -111,9 +111,8 @@ def tea_battery(peak_loc: float, avg_loc: float, avg_mwh: float, elec_rate: floa
                 actual_utilization=actual_util, number_chargers=number_of_charger, charge_time=charge_time)
 
 
-def tea_battery_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_type: str = None,
-                               clean_energy_cost: float = None, tender_cost_p_tonmi: float = None,
-                               diesel_cost_p_gal: float = None) -> nx.DiGraph:
+def tea_battery_all_facilities(G: nx.DiGraph, max_util: float = 0.88, clean_energy_cost: float = None,
+                               tender_cost_p_tonmi: float = None, diesel_cost_p_gal: float = None) -> nx.DiGraph:
     """
     Compute aggregate statistics for battery technology deployment in all facilities. Use the percentage of ton-mi increase
     to calculate all in terms of baseline ton-miles.
@@ -185,15 +184,14 @@ def tea_battery_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_ty
                 G.nodes[n]['energy_source_TEA'] = tea_battery(np.ceil(G.nodes[n]['peak']['number_loc'] * batt_p_loc),
                                                               np.ceil(G.nodes[n]['avg']['number_loc'] * batt_p_loc),
                                                               -G.nodes[n]['avg']['daily_demand_mwh'], 0,
-                                                              max_util=max_util, station_type=station_type)
+                                                              max_util=max_util)
             # if the facility does consume energy from the grid
             else:
                 # apply tea_battery function to compute the costs based on the peak and average number of locomotives
                 G.nodes[n]['energy_source_TEA'] = tea_battery(np.ceil(G.nodes[n]['peak']['number_loc'] * batt_p_loc),
                                                               np.ceil(G.nodes[n]['avg']['number_loc'] * batt_p_loc),
                                                               G.nodes[n]['avg']['daily_supply_mwh'],
-                                                              cost_p_location[n] / 1000,
-                                                              max_util=max_util, station_type=station_type)
+                                                              cost_p_location[n] / 1000, max_util=max_util)
             # get the time required to charge per locomotive
             charge_time = G.nodes[n]['energy_source_TEA']['charge_time']
             # get the average and peak queue times and lengths
@@ -219,7 +217,7 @@ def tea_battery_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_ty
             ))
         # if there is no facility at node n
         else:
-            G.nodes[n]['energy_source_TEA'] = tea_battery(0, 0, 0, 0, max_util=max_util, station_type=station_type)
+            G.nodes[n]['energy_source_TEA'] = tea_battery(0, 0, 0, 0, max_util=max_util)
             G.nodes[n]['energy_source_TEA'].update(dict(
                 charge_time=0,
                 avg_queue_time_p_loc=0,
@@ -494,7 +492,7 @@ def tea_hybrid(G: nx.DiGraph, max_util: float = 0.88, station_type: str = None, 
                 G.nodes[n]['energy_source_TEA'] = tea_battery(np.ceil(G.nodes[n]['peak']['number_loc'] * batt_p_loc),
                                                               np.ceil(G.nodes[n]['avg']['number_loc'] * batt_p_loc),
                                                               -G.nodes[n]['avg']['daily_demand_mwh'], 0,
-                                                              max_util=max_util, station_type=station_type)
+                                                              max_util=max_util)
             # if the facility does consume energy from the grid
             else:
                 # apply tea_battery function to compute the costs based on the peak and average number of locomotives
@@ -502,7 +500,7 @@ def tea_hybrid(G: nx.DiGraph, max_util: float = 0.88, station_type: str = None, 
                                                               np.ceil(G.nodes[n]['avg']['number_loc'] * batt_p_loc),
                                                               G.nodes[n]['avg']['daily_supply_mwh'],
                                                               cost_p_location[n] / 1000,
-                                                              max_util=max_util, station_type=station_type)
+                                                              max_util=max_util)
             # get the time required to charge per locomotive
             charge_time = G.nodes[n]['energy_source_TEA']['charge_time']
             # get the average and peak queue times and lengths
@@ -528,7 +526,7 @@ def tea_hybrid(G: nx.DiGraph, max_util: float = 0.88, station_type: str = None, 
             ))
         # if there is no facility at node n
         else:
-            G.nodes[n]['energy_source_TEA'] = tea_battery(0, 0, 0, 0, max_util=max_util, station_type=station_type)
+            G.nodes[n]['energy_source_TEA'] = tea_battery(0, 0, 0, 0, max_util=max_util)
             G.nodes[n]['energy_source_TEA'].update(dict(
                 charge_time=0,
                 avg_queue_time_p_loc=0,

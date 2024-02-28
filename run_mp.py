@@ -5,96 +5,80 @@ from facility_rollout_mp import facility_location_mp
 from facility_sizing_mp import facility_sizing_mp
 from tea_mp import tea_battery_mp, tea_diesel_mp
 from lca_mp import lca_battery_mp, lca_diesel_mp
-from routing_mp import ods_by_perc_ton_mi, ods_by_perc_ton_mi_forecast, route_flows_mp
+from routing_mp import route_flows_mp, od_flows_ton_mi_mp
 from plotting_mp import plot_battery_facility_location
+from input_output import extract_assert_scenario_mp_inputs
 
 
-# TODO: set up to match the wat run is called for a given scenario, using an input csv file
-def run_rollout(rr: str, fuel_type: str, D: float, time_horizon: list, facility_costs: dict = None,
-                max_flow=False, greedy=False, flow_mins: float = None, budgets: list = None,
-                candidate_facilities: list = None, discount_rates: any = None, num_shortest_paths: int = 1,
-                od_flow_perc: float = 1, deviation_paths=True,
-                fixed_facilities: dict = None, barred_facilities: dict = None,
-                y_warm_start: dict = None, warm_start_strategy: str = None, seed=None,
-                solution_tol: float = None, strong_cuts=False, nested=True, od_flows_provided=False,
-                benders=False, agg_cuts=True, solution_aids=False, binary_prog=True, suppress_output=False,
-                extend_graph=False, reroute: bool = None, switch_tech: bool = None, max_reroute_inc: float = None,
-                eff_energy_p_tender: float = 10000,
-                constant_flows=False, emissions_obj=False, title: str = None,
-                CCWS_filename: str = None, comm_group: str = 'TOTAL', loc_only=False,
-                G: nx.DiGraph = None, radius: float = None, intertypes: set = None,
-                plot=True, colors=False, time_step_label=True
-                ):
+# TODO: there seem to be issues with the emissions calculations;
+#  - could it be the units of the data?
+#  - other calculations in LCA?
+#  - are there any issues in TEA or with CAE?
+def run_mp_scenario_file(scenario_code: str, G: nx.DiGraph = None, plot=True):
+
+    [rr, fuel_type, range_km, max_flow,
+     time_horizon, deployment_percs, budgets, discount_rates,
+     facility_costs, fixed_facilities, barred_facilities,
+     max_util, _, _, clean_energy, clean_energy_cost, emissions_obj,
+     eff_energy_p_tender, tender_cost_p_tonmi, diesel_cost_p_gal, flow_data_filename,
+     suppress_output, scenario_code] = extract_assert_scenario_mp_inputs(scenario_code=scenario_code)
+
     if not G:
-        G = load_simplified_consolidated_graph(rr, radius=radius, intertypes=intertypes)
+        G = load_simplified_consolidated_graph(rr)
 
     if fuel_type == 'battery':
-        G.graph['scenario'] = dict(railroad=rr, range_mi=D * KM2MI, range_km=D, fuel_type=fuel_type,
-                                   reroute=reroute, switch_tech=switch_tech, max_reroute_inc=max_reroute_inc,
+        G.graph['scenario'] = dict(railroad=rr, range_mi=range_km * KM2MI, range_km=range_km, fuel_type=fuel_type,
                                    eff_kwh_p_batt=eff_energy_p_tender)
         t0 = time.time()
-        if od_flows_provided:
-            od_flows = G.graph['od_flows']
-        else:
-            # select almost all O-D pairs with non-zero flow (leave out the X% with the lowest flow values; too many)
-            if constant_flows:
-                ods, od_flows = ods_by_perc_ton_mi(G=G, perc_ods=od_flow_perc, CCWS_filename=CCWS_filename,
-                                                   od_flows_truncate=True)
-            else:
-                ods, od_flows = ods_by_perc_ton_mi_forecast(G=G, perc_ods=od_flow_perc, od_flows_truncate=True)
+        ods, od_flows_ton_mi, od_flows_ton = od_flows_ton_mi_mp(G=G, flow_data_filename=flow_data_filename,
+                                                                time_horizon=time_horizon)
 
         print('OD LIST:: %s seconds ---' % round(time.time() - t0, 3))
 
         t0 = time.time()
         # 2. locate facilities and extract graph form of this, G, and its induced subgraph, H
-        G = facility_location_mp(G, D=D, time_horizon=time_horizon, od_flows=od_flows, facility_costs=facility_costs,
-                                 max_flow=max_flow, greedy=greedy, flow_mins=flow_mins, budgets=budgets,
-                                 candidate_facilities=candidate_facilities, discount_rates=discount_rates,
+        G = facility_location_mp(G, range_km=range_km, time_horizon=time_horizon, od_flows_ton_mi=od_flows_ton_mi,
+                                 facility_costs=facility_costs, max_flow=max_flow,
+                                 deployment_percs=deployment_percs,
+                                 budgets=budgets, discount_rates=discount_rates,
                                  fixed_facilities=fixed_facilities, barred_facilities=barred_facilities,
-                                 y_warm_start=y_warm_start, warm_start_strategy=warm_start_strategy, seed=seed,
-                                 solution_tol=solution_tol, strong_cuts=strong_cuts, nested=nested,
-                                 deviation_paths=deviation_paths, extend_graph=extend_graph,
-                                 num_shortest_paths=num_shortest_paths, od_flow_perc=od_flow_perc,
-                                 benders=benders, agg_cuts=agg_cuts,
-                                 solution_aids=solution_aids,
-                                 binary_prog=binary_prog, suppress_output=suppress_output)
+                                 suppress_output=suppress_output)
 
         print('FACILITY LOCATION:: %s seconds ---' % round(time.time() - t0, 3))
 
-        if not loc_only:
-            t0 = time.time()
-            # 3. reroute flows and get average ton and locomotive flows for each edge
-            G = route_flows_mp(G=G, D=D, time_horizon=time_horizon, od_flows=od_flows, fuel_type=fuel_type)
-            print('FLOW ASSIGNMENT:: %s seconds ---' % round(time.time() - t0, 3))
-
-            t0 = time.time()
-            # 4. size facilities based on required energy
-            G = facility_sizing_mp(G=G, time_horizon=time_horizon, fuel_type=fuel_type, D=D, emissions_obj=emissions_obj,
-                                   suppress_output=suppress_output)
-            print('FACILITY SIZING:: {v0} seconds ---'.format(v0=round(time.time() - t0, 3)))
-
-            t0 = time.time()
-            # 5. LCA for each time period
-            G = lca_battery_mp(G=G, time_horizon=time_horizon, clean_energy=False)
-            G = lca_diesel_mp(G=G, time_horizon=time_horizon)
-            print('LCA:: {v0} seconds ---'.format(v0=round(time.time() - t0, 3)))
-
-            t0 = time.time()
-            # 6. TEA for each time period
-            G = tea_battery_mp(G=G, time_horizon=time_horizon)
-            G = tea_diesel_mp(G=G, time_horizon=time_horizon)
-            print('TEA:: {v0} seconds ---'.format(v0=round(time.time() - t0, 3)))
-
-            # update stats
-            G = operations_stats_mp(G=G, time_horizon=time_horizon)
+        t0 = time.time()
+        # 3. reroute flows and get average ton and locomotive flows for each edge
+        G = route_flows_mp(G=G, range_km=range_km, flow_data_filename=flow_data_filename, time_horizon=time_horizon,
+                           od_flows=od_flows_ton_mi, fuel_type=fuel_type)
+        print('FLOW ASSIGNMENT:: %s seconds ---' % round(time.time() - t0, 3))
 
         t0 = time.time()
+        # 4. size facilities based on required energy
+        G = facility_sizing_mp(G=G, time_horizon=time_horizon, fuel_type=fuel_type, range_km=range_km,
+                               emissions_obj=emissions_obj, suppress_output=suppress_output)
+        print('FACILITY SIZING:: {v0} seconds ---'.format(v0=round(time.time() - t0, 3)))
+
+        t0 = time.time()
+        # 5. LCA for each time period
+        G = lca_battery_mp(G=G, time_horizon=time_horizon, clean_energy=clean_energy)
+        G = lca_diesel_mp(G=G, time_horizon=time_horizon)
+        print('LCA:: {v0} seconds ---'.format(v0=round(time.time() - t0, 3)))
+
+        t0 = time.time()
+        # 6. TEA for each time period
+        G = tea_battery_mp(G=G, time_horizon=time_horizon, max_util=max_util, clean_energy_cost=clean_energy_cost,
+                           tender_cost_p_tonmi=tender_cost_p_tonmi, diesel_cost_p_gal=diesel_cost_p_gal)
+        G = tea_diesel_mp(G=G, time_horizon=time_horizon)
+        print('TEA:: {v0} seconds ---'.format(v0=round(time.time() - t0, 3)))
+
+        # update stats
+        G = operations_stats_mp(G=G, time_horizon=time_horizon)
+
+        t0 = time.time()
+        fig = None
         if plot:
-            fig = plot_battery_facility_location(G, time_horizon=time_horizon, additional_plots=True, nested=nested,
-                                                 max_flow=max_flow, colors=colors, time_step_label=time_step_label,
-                                                 title=title)
-        else:
-            fig = None
+            fig = plot_battery_facility_location(G, time_horizon=time_horizon, additional_plots=True, max_flow=max_flow,
+                                                 time_step_label=time_horizon, title=scenario_code)
         print('PLOTTING:: %s seconds ---' % round(time.time() - t0, 3))
 
     return G, fig

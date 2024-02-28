@@ -10,122 +10,21 @@ BATTERY
 '''
 
 
-def tea_battery_mp(G: nx.DiGraph, time_horizon: list):
+def tea_battery_mp(G: nx.DiGraph, time_horizon: list, max_util: float, clean_energy_cost: float = None,
+                   tender_cost_p_tonmi: float = None, diesel_cost_p_gal: float = None):
     for n in G:
         G.nodes[n]['energy_source_TEA'] = {t: dict() for t in time_horizon}
 
     G.graph['energy_source_TEA'] = {t: dict() for t in time_horizon}
 
     for t in time_horizon:
-        G = tea_battery_all_facilities_mp(G=G, time_step=t)
+        G = tea_battery_all_facilities_mp(G=G, time_step=t, max_util=max_util, clean_energy_cost=clean_energy_cost,
+                                          tender_cost_p_tonmi=tender_cost_p_tonmi, diesel_cost_p_gal=diesel_cost_p_gal)
 
     return G
 
 
-# def tea_battery(peak_loc: float, avg_loc: float, avg_mwh: float, elec_rate: float,
-#                 max_util: float = 0.88, station_type: str = None):
-#     """
-#     Calculates the breakdown of LCO into capital, O&M, and energy costs as well as the capital investment,
-#     annual O&M + energy cost, and actual average utilization and number of chargers for a battery charging facility
-#     of given throughput and size based on <peak_loc>, <max_util>, and <avg_loc>.
-#
-#     Parameters
-#     ----------
-#     peak_loc : float
-#         The peak number of locomotives that need to be charged at the facility
-#     avg_loc : float
-#         The average number of locomotives that need to be charged at the facility
-#     avg_mwh : float
-#         The total average energy consumption of the locomotives at the facility in MWh
-#     elec_rate : float
-#         The cost of electricity in $/kWh
-#     max_util : float, optional
-#         The maximum utilization of the facility, by default 0.88
-#     station_type : str, optional
-#         The type of charging station, by default None
-#
-#     Returns
-#     -------
-#     dict
-#         A dictionary containing the breakdown of LCO, capital investment, annual costs, actual utilization and
-#         number of chargers
-#     """
-#     # perform interpolation of results for a facility of given <peak_loc>, <max_util>, and <avg_loc> and
-#     # return the breakdown of LCO into: capital, O&M, and energy
-#     # and the capital investment, annual O&M + energy cost, and actual avg utilization and number of chargers
-#     # future versions will include params for charger type (power) locomotive energy storage, etc.
-#
-#     # for selected facilities that do not consume electricity from the grid, but instead from locomotive traffic,
-#     # size them according to their energy demand from the facility_sizing module
-#
-#     df = load_tea_battery_lookup()
-#     charge_time = df.loc[0, 'Total Charging Time per locomotive [hrs]']
-#
-#     if peak_loc == 0 and avg_loc == 0:
-#         return dict(station_LCO=0, om_LCO=0, energy_LCO=0, total_LCO=0, annual_total_cost=0, daily_energy_kwh=0,
-#                     annual_energy_kwh=0, station_total=0, annual_om_energy=0, actual_utilization=0, number_chargers=0,
-#                     charge_time=charge_time)
-#
-#     locos_p_charger = list(df['Locomotive per charger'].unique())
-#     # isolate station utilization and locomotive per charger to get relationship between util and throughput
-#     df_util_loco_p_charger = df[['Station Utilization', 'Locomotive per charger']].groupby(
-#         by=['Station Utilization', 'Locomotive per charger'], as_index=False).first()
-#     # find maximum number of locomotives per charger for given maximum utilization (discrete throughput)
-#     max_int_loco_p_charger = df_util_loco_p_charger[df_util_loco_p_charger['Station Utilization'] <= max_util].dropna()[
-#         'Locomotive per charger'].max()
-#     # compute number of chargers needed
-#     number_of_charger = np.ceil(peak_loc / max_int_loco_p_charger)
-#     # compute actual (average) number of locomotives per charger for station
-#     actual_loco_p_charger = (avg_loc / number_of_charger)
-#     # compute actual (average) utilization for station
-#     actual_util = actual_loco_p_charger * charge_time / 24
-#
-#     # check if average number of locomotives exceeds values in lookup table and replace
-#     max_loc = max(df['Number of Locomotive'])
-#     avg_loc_multiplier = 1
-#     if avg_loc >= max_loc:
-#         avg_loc_multiplier = avg_loc / max_loc  # estimator of cost scaling when number of locomotives is very large
-#         avg_loc = max_loc
-#     elif avg_loc < 1:
-#         avg_loc = 1
-#     avg_loc = int(avg_loc)
-#
-#     value_cols = ['Total energy [MWh]', 'Capital cost [$/kWh]', 'O&M less energy [$/kWh]', 'Energy [$/kWh]',
-#                   'Total charging cost [$/kWh]', 'Charging station capital investment',
-#                   'Annual O&M cost (w/energy cost)']
-#     df_lookup = df.groupby(by=['Number of Locomotive', 'Locomotive per charger']).first().loc[(avg_loc, slice(None))]
-#     if actual_loco_p_charger <= min(locos_p_charger):
-#         # use min util
-#         lookup_locos = min(locos_p_charger)
-#         df_results = df_lookup.loc[lookup_locos]
-#     elif actual_loco_p_charger >= max(locos_p_charger):
-#         # use max util
-#         lookup_locos = max(locos_p_charger)
-#         df_results = df_lookup.loc[lookup_locos]
-#     else:
-#         # use upper and lower and interpolate
-#         # find maximum number of locomotives per charger for given maximum utilization (discrete throughput)
-#         upper_loco = int(np.ceil(actual_loco_p_charger))
-#         lower_loco = int(np.floor(actual_loco_p_charger))
-#         if upper_loco == lower_loco:
-#             scale = 1
-#         else:
-#             scale = (actual_loco_p_charger - lower_loco) / (upper_loco - lower_loco)
-#         df_upper = df_lookup.loc[upper_loco][value_cols]
-#         df_lower = df_lookup.loc[lower_loco][value_cols]
-#         df_results = df_lower + scale * (df_upper - df_lower)
-#
-#     total_LCO = df_results['Capital cost [$/kWh]'] + df_results['O&M less energy [$/kWh]'] + elec_rate
-#     return dict(station_LCO=df_results['Capital cost [$/kWh]'], om_LCO=df_results['O&M less energy [$/kWh]'],
-#                 energy_LCO=elec_rate, total_LCO=total_LCO,
-#                 annual_total_cost=(total_LCO * avg_mwh * 1000 * 365),
-#                 daily_energy_kwh=avg_mwh * 1000, annual_energy_kwh=avg_mwh * 1000 * 365,
-#                 station_total=avg_loc_multiplier * df_results['Charging station capital investment'],
-#                 annual_om_energy=avg_loc_multiplier * df_results['Annual O&M cost (w/energy cost)'],
-#                 actual_utilization=actual_util, number_chargers=number_of_charger, charge_time=charge_time)
-
-
-def tea_battery(avg_loc: float, avg_mwh: float, elec_rate: float, max_util: float = 0.88, station_type: str = None):
+def tea_battery(avg_loc: float, avg_mwh: float, elec_rate: float, max_util: float = 0.88):
     """
     Calculates the breakdown of LCO into capital, O&M, and energy costs as well as the capital investment,
     annual O&M + energy cost, and actual average utilization and number of chargers for a battery charging facility
@@ -227,9 +126,9 @@ def tea_battery(avg_loc: float, avg_mwh: float, elec_rate: float, max_util: floa
                 actual_utilization=actual_util, number_chargers=number_of_charger, charge_time=charge_time)
 
 
-def tea_battery_all_facilities_mp(G: nx.DiGraph, time_step: str, max_util: float = 0.88, station_type: str = None,
+def tea_battery_all_facilities_mp(G: nx.DiGraph, time_step: str, max_util: float = 0.88,
                                   clean_energy_cost: float = None, tender_cost_p_tonmi: float = None,
-                                  diesel_cost_p_gal: float = None) -> nx.DiGraph:
+                                  diesel_cost_p_gal: float = None):
     """
     Compute aggregate statistics for battery technology deployment in all facilities. Use the percentage of ton-mi increase
     to calculate all in terms of baseline ton-miles.
@@ -253,7 +152,7 @@ def tea_battery_all_facilities_mp(G: nx.DiGraph, time_step: str, max_util: float
     # compute aggregate statistics for tech. deployment
     # use the percentage of ton-mi increase to calculate all in terms of baseline ton-miles
 
-    if clean_energy_cost is None:
+    if not clean_energy_cost:
         clean_energy_cost = 0
 
     # cost of electricity for each node based on state rates in [$/MWh]
@@ -299,15 +198,13 @@ def tea_battery_all_facilities_mp(G: nx.DiGraph, time_step: str, max_util: float
                 # apply tea_battery function to compute the costs based on the peak and average number of locomotives
                 G.nodes[n]['energy_source_TEA'][time_step] = tea_battery(
                     np.ceil(G.nodes[n]['avg'][time_step]['number_loc'] * batt_p_loc),
-                    -G.nodes[n]['avg'][time_step]['daily_demand_mwh'], 0,
-                    max_util=max_util, station_type=station_type)
+                    -G.nodes[n]['avg'][time_step]['daily_demand_mwh'], 0, max_util=max_util)
             # if the facility does consume energy from the grid
             else:
                 # apply tea_battery function to compute the costs based on the peak and average number of locomotives
                 G.nodes[n]['energy_source_TEA'][time_step] = tea_battery(
                     np.ceil(G.nodes[n]['avg'][time_step]['number_loc'] * batt_p_loc),
-                    G.nodes[n]['avg'][time_step]['daily_supply_mwh'], cost_p_location[n] / 1000,
-                    max_util=max_util, station_type=station_type)
+                    G.nodes[n]['avg'][time_step]['daily_supply_mwh'], cost_p_location[n] / 1000, max_util=max_util)
             # get the time required to charge per locomotive
             charge_time = G.nodes[n]['energy_source_TEA'][time_step]['charge_time']
             # get the average and peak queue times and lengths
@@ -328,8 +225,7 @@ def tea_battery_all_facilities_mp(G: nx.DiGraph, time_step: str, max_util: float
             ))
         # if there is no facility at node n
         else:
-            G.nodes[n]['energy_source_TEA'][time_step] = tea_battery(0, 0, 0, max_util=max_util,
-                                                                     station_type=station_type)
+            G.nodes[n]['energy_source_TEA'][time_step] = tea_battery(0, 0, 0, max_util=max_util)
             G.nodes[n]['energy_source_TEA'][time_step].update(dict(
                 charge_time=0,
                 avg_queue_time_p_loc=0,

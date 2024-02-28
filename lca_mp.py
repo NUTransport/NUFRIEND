@@ -7,13 +7,15 @@ rail network and deployment scenario. All calculations are stored in updates mad
 """
 
 from util import *
-from helper import load_lca_battery_lookup, load_lca_hydrogen_lookup, load_lca_battery_lookup_mp
+from helper import load_lca_hydrogen_lookup, load_lca_battery_lookup_mp
 
 '''
 BATTERY
 '''
 
 
+# TODO: check these items here for passing all activated inputs,
+#  consider allowing clean_energy and clean_energy_cost in TEA
 def lca_battery_mp(G: nx.DiGraph, time_horizon: list, clean_energy=False):
     for n in G:
         G.nodes[n]['energy_source_LCA'] = {t: dict() for t in time_horizon}
@@ -63,39 +65,18 @@ def lca_battery_step_mp(G: nx.DiGraph, time_step: str, clean_energy=False):
 
     df_dropin = load_lca_dropin_lookup()
     diesel_factor = df_dropin.loc['diesel', 'gCO2/gal'] / 1e6  # in [ton-CO2/gal]
-    # comm_list = ['AG_FOOD', 'CHEM_PET', 'COAL', 'FOR_PROD', 'IM', 'MET_ORE', 'MO_VEH', 'NONMET_PRO', 'OTHER']
-    # comm_er = load_comm_energy_ratios()['Weighted ratio'][comm_list].to_numpy()  # commodity energy ratios
-    # comm_tonmi_dict = {c: sum([G.edges[u, v]['baseline_avg_ton'][c] * G.edges[u, v]['miles'] for u, v in G.edges])
-    #                    for c in comm_list}
-    # total_tonmi = sum(comm_tonmi_dict.values())
-    # comm_diesel_factor = diesel_factor * sum([comm_er[i] * comm_tonmi_dict[comm_list[i]] / total_tonmi
-    #                                           for i in range(len(comm_list))])
 
     comm_list = list({c for u, v in G.edges for c in G.edges[u, v]['battery_avg_kwh'][time_step].keys()})
 
-    # battery_annual_energy_kwh = G.graph['MCNF_avg']['total_energy_mwh'] * 1000 * 365
     battery_annual_energy_kwh = G.graph['operations']['alt_tech_total_annual_kwh'][time_step]
     battery_annual_tonmi = G.graph['operations']['alt_tech_total_annual_tonmi'][time_step]
     support_diesel_annual_tonmi = G.graph['operations']['support_diesel_total_annual_tonmi'][time_step]
     baseline_annual_tonmi = {c: battery_annual_tonmi[c] + support_diesel_annual_tonmi[c] for c in comm_list}
     support_diesel_annual_gal = G.graph['operations']['support_diesel_total_annual_gal'][time_step]
-    # battery_annual_energy_kwh = {c: 365 * sum(G.edges[u, v]['battery_avg_kwh'][c] for u, v in G.edges)
-    #                              for c in comm_list}
-    # annual_new_total_ton_mi = G.graph['operations']['annual_new_total_ton_mi']
-    # support_diesel_annual_tonmi = G.graph['operations']['annual_support_diesel_total_ton_mi']
-    # battery_actual_annual_tonmi = annual_new_total_ton_mi - support_diesel_annual_tonmi
-    # use the percentage of ton-mi increase to calculate all in terms of baseline ton-miles
-    # tonmi_deflation_factor = {c: 1 - G.graph['operations']['perc_tonmi_inc'][c] / 100 for c in comm_list}
-    # battery_annual_tonmi = {c: 365 * sum([G.edges[u, v]['battery_avg_ton'][c] * G.edges[u, v]['miles']
-    #                                       for u, v in G.edges]) * tonmi_deflation_factor[c] for c in comm_list}
-    # support_diesel_annual_tonmi = {c: 365 * sum([G.edges[u, v]['support_diesel_avg_ton'][c] * G.edges[u, v]['miles']
-    #                                              for u, v in G.edges]) * tonmi_deflation_factor[c] for c in comm_list}
-    # support_diesel_annual_gal = {c: 365 * sum([G.edges[u, v]['support_diesel_avg_gal'][c] for u, v in G.edges])
-    #                              for c in comm_list}
-    annual_battery_total_emissions = {c: sum([G.nodes[n]['energy_source_LCA'][time_step]
-                                              ['annual_total_emissions_tonco2']
-                                              for n in G]) * battery_annual_energy_kwh[c] /
-                                         battery_annual_energy_kwh['TOTAL'] for c in comm_list}
+    annual_battery_total_emissions = {c: (sum([G.nodes[n]['energy_source_LCA'][time_step]
+                                               ['annual_total_emissions_tonco2']
+                                               for n in G]) * battery_annual_energy_kwh[c] /
+                                          battery_annual_energy_kwh['TOTAL']) for c in comm_list}
 
     battery_avg_emissions_tonco2_kwh = annual_battery_total_emissions['TOTAL'] / battery_annual_energy_kwh['TOTAL']
 
@@ -168,38 +149,6 @@ def lca_hydrogen(G: nx.DiGraph, h2_fuel_type: str = 'Natural Gas'):
 
     df_dropin = load_lca_dropin_lookup()
     diesel_factor = df_dropin.loc['diesel', 'gCO2/gal'] / 1e6  # in [ton-CO2/gal]
-    # comm_list = ['AG_FOOD', 'CHEM_PET', 'COAL', 'FOR_PROD', 'IM', 'MET_ORE', 'MO_VEH', 'NONMET_PRO', 'OTHER']
-    # comm_er = load_comm_energy_ratios()['Weighted ratio'][comm_list].to_numpy()  # commodity energy ratios
-    # comm_tonmi_dict = {c: sum([G.edges[u, v]['baseline_avg_ton'][c] * G.edges[u, v]['miles'] for u, v in G.edges])
-    #                    for c in comm_list}
-    # total_tonmi = sum(comm_tonmi_dict.values())
-    # comm_diesel_factor = diesel_factor * sum([comm_er[i] * comm_tonmi_dict[comm_list[i]] / total_tonmi
-    #                                           for i in range(len(comm_list))])
-
-    # hydrogen_annual_energy_kgh2 = G.graph['MCNF_avg']['total_energy_kgh2'] * 365
-    # annual_new_total_ton_mi = G.graph['operations']['annual_new_total_ton_mi']
-    # support_diesel_annual_tonmi = G.graph['operations']['annual_support_diesel_total_ton_mi']
-    # battery_actual_annual_tonmi = annual_new_total_ton_mi - support_diesel_annual_tonmi
-    # use the percentage of ton-mi increase to calculate all in terms of baseline ton-miles
-    # tonmi_deflation_factor = (100 - G.graph['operations']['perc_tonmi_inc']) / 100
-    # hydrogen_annual_tonmi = sum([G.edges[u, v]['hydrogen_avg_ton']['TOTAL'] * G.edges[u, v]['miles'] * 365
-    #                              for u, v in G.edges]) * tonmi_deflation_factor
-    # support_diesel_annual_tonmi = sum([G.edges[u, v]['support_diesel_avg_ton']['TOTAL'] * G.edges[u, v]['miles'] * 365
-    #                                    for u, v in G.edges]) * tonmi_deflation_factor
-    # baseline_annual_tonmi = hydrogen_annual_tonmi + support_diesel_annual_tonmi
-    # support_diesel_annual_gal = sum([G.edges[u, v]['support_diesel_avg_gal']['TOTAL'] * 365 for u, v in G.edges])
-    # annual_hydrogen_total_emissions = sum([G.nodes[n]['energy_source_LCA']['annual_total_emissions_tonco2'] for n in G])
-    # G.graph['energy_source_LCA'] = dict(
-    #     annual_hydrogen_total_emissions=annual_hydrogen_total_emissions,
-    #     annual_support_diesel_total_emissions=diesel_factor * support_diesel_annual_gal,
-    #     hydrogen_emissions_tonco2_kgh2=annual_hydrogen_total_emissions / hydrogen_annual_energy_kgh2,
-    #     hydrogen_emissions_tonco2_tonmi=annual_hydrogen_total_emissions / hydrogen_annual_tonmi,
-    #     support_diesel_emissions_tonco2_tonmi=diesel_factor * support_diesel_annual_gal / support_diesel_annual_tonmi
-    #     if support_diesel_annual_tonmi > 0 else 0,
-    #     avg_emissions_tonco2_tonmi=((annual_hydrogen_total_emissions + diesel_factor * support_diesel_annual_gal) /
-    #                                 baseline_annual_tonmi),
-    #     annual_total_emissions_tonco2=annual_hydrogen_total_emissions + diesel_factor * support_diesel_annual_gal
-    # )
     annual_hydrogen_total_emissions = {c: sum(e_factor * G.edges[u, v]['hydrogen_avg_kgh2'][c] * 365
                                               for u, v in G.edges) for c in comm_list}
     tonmi_deflation_factor = {c: 1 - G.graph['operations']['perc_tonmi_inc'][c] / 100 for c in comm_list}

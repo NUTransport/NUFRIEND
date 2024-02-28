@@ -39,7 +39,7 @@ def plot_battery_facility_location(G, time_horizon, crs='WGS84', additional_plot
     t0 = time.time()
     # H = selected_subgraph(G=G, time_step=time_step)
     nodes_gdf, edges_gdf = gdfs_from_graph(G, crs=crs, smooth_geometry=False)
-    print('\t GDF EXTRACTION:: ' + str(time.time() - t0))
+    print('GDF EXTRACTION:: ' + str(time.time() - t0))
 
     if additional_plots:
         # Trace 0: baseline edges
@@ -148,7 +148,7 @@ def plot_battery_facility_location_static(G, time_horizon, title=None, crs='WGS8
     t0 = time.time()
     # H = selected_subgraph(G=G, time_step=time_step)
     nodes_gdf, edges_gdf = gdfs_from_graph(G, crs=crs, smooth_geometry=False)
-    print('\t GDF EXTRACTION:: ' + str(time.time() - t0))
+    print('GDF EXTRACTION:: ' + str(time.time() - t0))
 
     for ti, ts in enumerate(time_horizon):
         fig.add_trace(plot_edges(edges_gdf, time_idx=ti, time_horizon=time_horizon, color=c[ti], incremental=True))

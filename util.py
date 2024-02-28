@@ -42,6 +42,8 @@ import plotly.graph_objs
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
+from plotly.offline import iplot
+
 
 warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
 
@@ -71,6 +73,7 @@ NX_DIR = os.path.join(INPUT_DIR, 'networks')
 TEA_DIR = os.path.join(INPUT_DIR, 'TEA')
 RR_DIR = os.path.join(INPUT_DIR, 'railroad')
 SCENARIO_DIR = os.path.join(INPUT_DIR, 'scenario')
+FACILITY_DIR = os.path.join(INPUT_DIR, 'facility')
 # output directory
 OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
 # output subdirectories
