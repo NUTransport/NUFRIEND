@@ -156,7 +156,6 @@ def route_baseline_flows(G: nx.DiGraph, flow_data_filename: str):
             flow_df_c = flow_df_c.reset_index()
             flow_df_c.index = flow_df_c['Origin-Destination SPLC']
             # assign the tons of flow for this commodity group to the respective index
-            # TODO: drop the Time Window column!
             f[c_idx, :, 0] = [flow_df_c.loc[od_str, 'Tons'] if od_str in flow_df_c.index else 0
                               for od_str in od_str_list]
             # NEW

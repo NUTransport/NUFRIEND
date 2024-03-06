@@ -10,12 +10,12 @@ ROUTING METHODS
 '''
 
 
-def route_flows_mp(G: nx.DiGraph, range_km: float, flow_data_filename: str, time_horizon: list, od_flows: dict,
+def route_flows_mp(G: nx.DiGraph, range_km: float, flow_data_filename: str, time_horizon: list, od_list: list,
                    fuel_type: str):
+    G = G.to_directed()
     edge_list = list(G.edges)
-    edge_list.extend([(v, u) for u, v in edge_list])  # both directions
-    edge_list = list(set(edge_list))
-    od_list = list(od_flows.keys())
+    # edge_list.extend([(v, u) for u, v in edge_list])  # both directions
+    # edge_list = list(set(edge_list))
     t0 = time.time()
     pli_mat = path_link_incidence_mat_mp(G=G, od_list=od_list, edge_list=edge_list)
     print('PLI MATRIX:: {v0} seconds'.format(v0=time.time() - t0))
@@ -27,7 +27,8 @@ def route_flows_mp(G: nx.DiGraph, range_km: float, flow_data_filename: str, time
 
     # od_comm_flows = {<time_period>: {<comm>: np.array([<od_flows> vals in order of od_list])
     #                                  for <comm> in <comm_groups>} for <time_period> in <time_horizon>}
-    od_comm_flows = od_flows_comm_ton_mi_mp(G=G, flow_data_filename=flow_data_filename, time_horizon=time_horizon)
+    od_comm_flows = od_flows_comm_ton_mi_mp(G=G, flow_data_filename=flow_data_filename, time_horizon=time_horizon,
+                                            od_list=od_list)
     # comm group list; does not include 'TOTAL'
 
     rr = G.graph['railroad']
@@ -141,7 +142,6 @@ def route_flows_mp(G: nx.DiGraph, range_km: float, flow_data_filename: str, time
         print('\t EDGE ASSIGNMENT {v0}:: {v1} seconds'.format(v0=t, v1=time.time() - t1))
 
     # all values here are annual
-    # TODO: change <edge_list>?
     G.graph['operations'] = dict(
         baseline_total_annual_tonmi={
             t: {c: 365 * sum(G.edges[e]['baseline_avg_ton'][t][c] * G.edges[e]['miles'] for e in edge_list)
@@ -209,7 +209,7 @@ DEPLOYMENT PERCENTGE METHODS
 '''
 
 
-def od_flows_comm_ton_mi_mp(G: nx.DiGraph, flow_data_filename: str, time_horizon: list):
+def od_flows_comm_ton_mi_mp(G: nx.DiGraph, flow_data_filename: str, time_horizon: list, od_list: list):
     # return O-D pairs in CCWS tha provide ton flows >= <perc_ods> * total CCWS ton flows
     # od_flows is average daily ton-miles
 
@@ -244,15 +244,15 @@ def od_flows_comm_ton_mi_mp(G: nx.DiGraph, flow_data_filename: str, time_horizon
     flow_df = flow_df.groupby(by=['Origin-Destination nodeid comb',
                                   'Commodity Group Name']).sum(numeric_only=True)[cols_to_keep]
 
-    ods = list(set(comb_od_nodeid_dict[od] for od in flow_df.index.get_level_values(0)))
-    ods = [(o, d) for o, d in ods if o != d]
+    # ods = list(set(comb_od_nodeid_dict[od] for od in flow_df.index.get_level_values(0)))
+    # ods = [(o, d) for o, d in ods if o != d]
 
-    od_list_idx = {v: i for i, v in enumerate(ods)}
+    od_list_idx = {v: i for i, v in enumerate(od_list)}
     comm_groups = list(set(flow_df.index.get_level_values(1)))
-    od_comm_flows = {t: {c: np.zeros((len(ods),)) for c in comm_groups} for t in time_horizon}
+    od_comm_flows = {t: {c: np.zeros((len(od_list),)) for c in comm_groups} for t in time_horizon}
     for od_comb, comm in flow_df.index:
         od = comb_od_nodeid_dict[od_comb]
-        if od in ods:
+        if od in od_list:
             for t in time_horizon:
                 od_comm_flows[t][comm][od_list_idx[od]] = flow_df.loc[(od_comb, comm), t + ' Tons']
 
@@ -295,7 +295,7 @@ def od_flows_ton_mi_mp(G: nx.DiGraph, flow_data_filename: str, time_horizon: lis
     flow_df['Origin-Destination nodeid comb'] = flow_df.index
 
     # load from json or compute if does not exist
-    filepath_sp_dict = os.path.join(NX_DIR, rr + '_SP_dict_miles.json')
+    filepath_sp_dict = os.path.join(MAT_DIR, rr + '_SP_dict_miles.json')
     if os.path.exists(filepath_sp_dict):
         miles = load_dict_from_json(filepath_sp_dict)
     else:

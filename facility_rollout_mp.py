@@ -13,7 +13,7 @@ def facility_location_mp(G: nx.DiGraph, range_km: float, time_horizon: list, od_
                          facility_costs: dict = None, max_flow=False, deployment_percs: float = None,
                          budgets: list = None, discount_rates: any = None,
                          fixed_facilities: dict = None, barred_facilities: dict = None,
-                         nested=True, binary_prog=False, suppress_output=True):
+                         binary_prog=False, suppress_output=True, opt_tol: float = None):
     """
 
     Parameters
@@ -41,16 +41,25 @@ def facility_location_mp(G: nx.DiGraph, range_km: float, time_horizon: list, od_
                                                       facility_costs=facility_costs,
                                                       discount_rates=discount_rates,
                                                       fixed_facilities=fixed_facilities,
-                                                      barred_facilities=barred_facilities, nested=nested,
-                                                      binary_prog=binary_prog, suppress_output=suppress_output)
+                                                      barred_facilities=barred_facilities,
+                                                      binary_prog=binary_prog, suppress_output=suppress_output,
+                                                      opt_tol=opt_tol)
+        # G = mp_dc_frlm_max_ilp(G=G, range_km=range_km, time_horizon=time_horizon, od_flows=od_flows_ton_mi,
+        #                        budgets=budgets, facility_costs=facility_costs,
+        #                        discount_rates=discount_rates,
+        #                        fixed_facilities=fixed_facilities,
+        #                        barred_facilities=barred_facilities,
+        #                        binary_prog=binary_prog, suppress_output=suppress_output,
+        #                        opt_tol=opt_tol)
     else:
         G, y_val, _ = min_cost_facility_cycle_mp_ilp(G=G, range_km=range_km, time_horizon=time_horizon,
                                                      od_flows_ton_mi=od_flows_ton_mi,
                                                      deployment_percs=deployment_percs,
                                                      facility_costs=facility_costs, discount_rates=discount_rates,
                                                      fixed_facilities=fixed_facilities,
-                                                     barred_facilities=barred_facilities, nested=nested,
-                                                     binary_prog=binary_prog, suppress_output=suppress_output)
+                                                     barred_facilities=barred_facilities,
+                                                     binary_prog=binary_prog, suppress_output=suppress_output,
+                                                     opt_tol=opt_tol)
 
     G = covered_graph_mp(G)
     # here we construct the final time step subgraph and index each node and edge by the first time step in which
@@ -63,77 +72,10 @@ def facility_location_mp(G: nx.DiGraph, range_km: float, time_horizon: list, od_
     return G
 
 
-# def input_cleaning(G: nx.DiGraph, time_horizon: list, od_flows: dict, budgets: dict = None, flow_mins: dict = None,
-#                    facility_costs: dict = None, discount_rates: any = None):
-#     node_list = list(G.nodes())
-#     ods = list(od_flows.keys())
-#
-#     # budgets not provided, assume to be # of facilities
-#     if budgets is None:
-#         budgets = {t: len(node_list) for t in time_horizon}
-#     # provided budgets not for full time_horizon, extend
-#     else:
-#         missing_times = [t for t in time_horizon if t not in budgets.keys()]
-#         if len(missing_times) > 0:
-#             for t in missing_times:
-#                 budgets[t] = len(node_list)
-#
-#     # facility costs not provided, assume all candidate facilities have the same cost
-#     if facility_costs is None:
-#         facility_costs = {(n, t): 1 for t in time_horizon for n in node_list}
-#     # facilities with no costs specified
-#     # if len(set(node_list).difference(set(facility_costs.keys()))) != 0:
-#     #     missing_facilities = set(node_list).difference(set(facility_costs.keys()))
-#     #     for d in missing_facilities:
-#     #         facility_costs[d] = {t: np.inf for t in time_horizon}
-#     # facilities with missing time_horizon costs
-#     # missing_times = [n for n in node_list if len(facility_costs[n]) < T]
-#     # if len(missing_times) > 0:
-#     #     t0 = time_horizon[0]
-#     #     for d in missing_times:
-#     #         # if the smallest time period is empty, set it to np.inf
-#     #         if t0 not in facility_costs[d].keys():
-#     #             facility_costs[d][t0] = np.inf
-#     #     # fill in remaining time steps
-#     #     for t_idx in range(1, len(time_horizon)):
-#     #         for d in missing_times:
-#     #             # if the value for this time step is missing, take on the value of the previously available time step
-#     #             if time_horizon[t_idx] not in facility_costs[d].keys():
-#     #                 facility_costs[d][time_horizon[t_idx]] = facility_costs[d][time_horizon[t_idx - 1]]
-#     # facility_costs = {(n, t): facility_costs[n][t] for n, t in product(node_list, time_horizon)}
-#
-#     # discount_rates not provided, assumed all to be 1
-#     if discount_rates is None:
-#         discount_rates = {t: 1 for t in time_horizon}
-#     # provided discount_rates not for full time_horizon, extend
-#     elif isinstance(discount_rates, float) or isinstance(discount_rates, int):
-#         discount_rates = {t: (1 / (1 + discount_rates)) ** t for t in time_horizon}
-#     else:
-#         missing_times = [t for t in time_horizon if t not in discount_rates.keys()]
-#         if len(missing_times) > 0:
-#             for t in missing_times:
-#                 discount_rates[t] = 1
-#
-#     # OD pairs with missing time_horizon flows
-#     missing_times = set(od for od in ods if not isinstance(od_flows[od], dict))
-#     if len(missing_times) > 0:
-#         t0 = time_horizon[0]
-#         for od in missing_times:
-#             # if the smallest time period is empty, set it to 0
-#             if not isinstance(od_flows[od], dict):
-#                 od_flows[od] = {t0: od_flows[od]}
-#                 # fill in remaining time steps
-#                 for t_idx in range(1, len(time_horizon)):
-#                     # take on the value of the previously available time step
-#                     od_flows[od][time_horizon[t_idx]] = od_flows[od][time_horizon[t_idx - 1]]
-#
-#     return od_flows, budgets, facility_costs, discount_rates
-
-
 def max_flow_facility_cycle_mp_ilp(G: nx.Graph, range_km: float, time_horizon: list, od_flows_ton_mi: dict,
                                    budgets: dict = None, facility_costs: dict = None, discount_rates: any = None,
                                    fixed_facilities: dict = None, barred_facilities: dict = None,
-                                   nested=True, binary_prog=True, suppress_output=False):
+                                   binary_prog=True, suppress_output=False, opt_tol: float = None):
     """
     Solve and plot solution for path constrained facility location problem
 
@@ -262,18 +204,9 @@ def max_flow_facility_cycle_mp_ilp(G: nx.Graph, range_km: float, time_horizon: l
             m.addConstr(gp.quicksum(fac_costs[j, t] * (y[j, t] - y[j, time_horizon[t_idx - 1]])
                                     for j in node_list) <= budgets[t], name='budget' + str(t))
 
-    if nested:
-        # facility nestedness constraints
-        m.addConstrs((y[j, time_horizon[t_idx]] <= y[j, time_horizon[t_idx + 1]]
-                      for t_idx in range(len(time_horizon) - 1) for j in node_list),
-                     name='facility_nestedness')
-        # O-D pair nestedness constraints (should be implied by facility nestedness and coverage constraints
-        # m.addConstrs((z[od, time_horizon[t_idx]] <= z[od, u] for od in ods
-        #               for t_idx in range(len(time_horizon)) for u in time_horizon[t_idx + 1:]),
-        #              name='od_nestedness')
-        # m.addConstrs((z[od, time_horizon[t_idx]] <= z[od, time_horizon[t_idx + 1]] for od in ods
-        #               for t_idx in range(len(time_horizon) - 1)),
-        #              name='od_nestedness')
+    # facility nestedness constraints
+    m.addConstrs((y[j, time_horizon[t_idx]] <= y[j, time_horizon[t_idx + 1]]
+                  for t_idx in range(len(time_horizon) - 1) for j in node_list), name='facility_nestedness')
 
     if fixed_facilities:
         # facilities that must be built (based on facilities selected in previous time steps)
@@ -284,6 +217,10 @@ def max_flow_facility_cycle_mp_ilp(G: nx.Graph, range_km: float, time_horizon: l
         # facilities that are not to be built (based on facilities not selected in future time steps)
         m.addConstrs((y[j, t] == 0 for t in barred_facilities.keys() for j in barred_facilities[t]),
                      name='barred_facilities')
+
+    # set solution tolerance
+    if opt_tol:
+        m.setParam('MIPGap', opt_tol)
 
     # write ILP model
     # m.write('/Users/adrianhz/Desktop/KCS_test_ILP.lp')
@@ -340,7 +277,7 @@ def min_cost_facility_cycle_mp_ilp(G: nx.Graph, range_km: float, time_horizon: l
                                    deployment_percs: dict = None, facility_costs: dict = None,
                                    discount_rates: any = None,
                                    fixed_facilities: list = None, barred_facilities: list = None,
-                                   nested=True, binary_prog=True, suppress_output=False):
+                                   binary_prog=True, suppress_output=False, opt_tol: float = None):
     """
     Solve and plot solution for path constrained facility location problem
 
@@ -468,17 +405,9 @@ def min_cost_facility_cycle_mp_ilp(G: nx.Graph, range_km: float, time_horizon: l
     m.addConstrs((gp.quicksum(z[od, t] * path_flows[od, t] for od in ods if (od, t) in od_vars) >= deployment_percs[t]
                   for t in time_horizon), name='flow_min')
 
-    if nested:
-        # facility nestedness constraints
-        m.addConstrs((y[j, time_horizon[t_idx]] <= y[j, time_horizon[t_idx + 1]]
-                      for t_idx in range(len(time_horizon) - 1) for j in node_list), name='facility_nestedness')
-        # O-D pair nestedness constraints (should be implied by facility nestedness and coverage constraints
-        # m.addConstrs((z[od, time_horizon[t_idx]] <= z[od, u] for od in ods
-        #               for t_idx in range(len(time_horizon)) for u in time_horizon[t_idx + 1:]),
-        #              name='od_nestedness')
-        # m.addConstrs((z[od, time_horizon[t_idx]] <= z[od, time_horizon[t_idx + 1]] for od in ods
-        #               for t_idx in range(len(time_horizon) - 1)),
-        #              name='od_nestedness')
+    # facility nestedness constraints
+    m.addConstrs((y[j, time_horizon[t_idx]] <= y[j, time_horizon[t_idx + 1]]
+                  for t_idx in range(len(time_horizon) - 1) for j in node_list), name='facility_nestedness')
 
     if fixed_facilities:
         m.addConstrs((y[j, t] == 1 for t in fixed_facilities.keys() for j in fixed_facilities[t]),
@@ -488,6 +417,10 @@ def min_cost_facility_cycle_mp_ilp(G: nx.Graph, range_km: float, time_horizon: l
         # facilities that are not to be built (based on facilities not selected in future time steps)
         m.addConstrs((y[j, t] == 0 for t in barred_facilities.keys() for j in barred_facilities[t]),
                      name='barred_facilities')
+
+    # set solution tolerance
+    if opt_tol:
+        m.setParam('MIPGap', opt_tol)
 
     # write ILP model
     # m.write('/Users/adrianhz/Desktop/KCS_test_ILP.lp')
@@ -550,7 +483,7 @@ def cycle_adjacency_matrix_mp(G: nx.Graph, paths: list, range_km: float):
     #   ii)     a^0_ij (d_{i,path[0]} + d_{path[0],j} <= D),
     #   iii)    a^n_ij (d_{i,path[-1]} + d_{path[-1],j} <= D)
 
-    mat_filepath = os.path.join(NX_DIR, G.graph['railroad'] + '_' + str(range_km) + '_p2p_adjacency_mat_mp.pkl')
+    mat_filepath = os.path.join(MAT_DIR, G.graph['railroad'] + '_' + str(range_km) + '_p2p_adjacency_mat_mp.pkl')
     if os.path.exists(mat_filepath):
         return pkl.load(open(mat_filepath, 'rb'))
 

@@ -152,11 +152,11 @@ def tea_battery_all_facilities_mp(G: nx.DiGraph, time_step: str, max_util: float
     # compute aggregate statistics for tech. deployment
     # use the percentage of ton-mi increase to calculate all in terms of baseline ton-miles
 
-    if not clean_energy_cost:
+    if clean_energy_cost is None:
         clean_energy_cost = 0
 
     # cost of electricity for each node based on state rates in [$/MWh]
-    cost_p_location = elec_rate_state_mp(G, year=time_step)
+    cost_p_location = elec_rate_state_mp(G, year=time_step, clean_elec_prem_dolkwh=clean_energy_cost)
 
     # load fuel technology factors
     ds = G.graph['scenario']
@@ -190,7 +190,7 @@ def tea_battery_all_facilities_mp(G: nx.DiGraph, time_step: str, max_util: float
 
     # for each node in G
     for n in G:
-        # if there is a facilit located at n
+        # if there is a facility located at n
         if G.nodes[n]['facility'][time_step] == 1:
             # if the facility is merely an energy transfer point (does not consume energy from the grid)
             if 'energy_transfer' in G.nodes[n]['avg'][time_step].keys() and \
@@ -431,6 +431,22 @@ HYDROGEN
 '''
 
 
+def tea_hydrogen_mp(G: nx.DiGraph, time_horizon: list, max_util: float = 0.88, station_type: str = 'Cryo-pump',
+                    clean_energy_cost: float = None, tender_cost_p_tonmi: float = None,
+                    diesel_cost_p_gal: float = None):
+    for n in G:
+        G.nodes[n]['energy_source_TEA'] = {t: dict() for t in time_horizon}
+
+    G.graph['energy_source_TEA'] = {t: dict() for t in time_horizon}
+
+    for t in time_horizon:
+        G = tea_hydrogen_all_facilities_mp(G=G, time_step=t, max_util=max_util, station_type=station_type,
+                                           clean_energy_cost=clean_energy_cost, tender_cost_p_tonmi=tender_cost_p_tonmi,
+                                           diesel_cost_p_gal=diesel_cost_p_gal)
+
+    return G
+
+
 def tea_hydrogen(peak_loc: float, avg_loc: float, avg_kgh2: float, max_util: float = 0.88,
                  loc2kgh2: float = 4000, station_type: str = 'Cryo-pump', clean_energy_dolkg: float = None):
     """
@@ -574,18 +590,17 @@ def tea_hydrogen(peak_loc: float, avg_loc: float, avg_kgh2: float, max_util: flo
     return tea_d
 
 
-def tea_hydrogen_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_type: str = 'Cryo-pump',
-                                clean_energy_cost: float = None, diesel_cost_p_gal: float = None):
+def tea_hydrogen_all_facilities_mp(G: nx.DiGraph, time_step: str, max_util: float = 0.88,
+                                   station_type: str = 'Cryo-pump', clean_energy_cost: float = None,
+                                   tender_cost_p_tonmi: float = None, diesel_cost_p_gal: float = None):
     # lookup dataframes for constants
     rr_v = load_railroad_values().loc[G.graph['scenario']['railroad']]
     # calculate average # batteries per locomotive based on range and effective battery energy capacity
     # eff_kwh_p_batt = ds['kwh_p_batt'] * ft_ef['Effective capacity']
 
-    comm_list = list({c for u, v in G.edges for c in G.edges[u, v]['hydrogen_avg_ton'].keys()})
-
-    tonmi_deflation_factor = {c: 1 - G.graph['operations']['perc_tonmi_inc'][c] / 100 for c in comm_list}
-    hydrogen_tonmi = {c: sum([G.edges[u, v]['hydrogen_avg_ton'][c] * G.edges[u, v]['miles']
-                              for u, v in G.edges]) * tonmi_deflation_factor[c] for c in comm_list}
+    comm_list = list({c for u, v in G.edges for c in G.edges[u, v]['hydrogen_avg_ton'][time_step].keys()})
+    hydrogen_tonmi = {c: sum([G.edges[u, v]['hydrogen_avg_ton'][time_step][c] * G.edges[u, v]['miles']
+                              for u, v in G.edges]) for c in comm_list}
     hydrogen_tonmi.update({c: hydrogen_tonmi[c] if hydrogen_tonmi[c] > 0 else 1 for c in comm_list})
 
     car_dol_hr = 8.42  # [$/hr] delay cost per car-hr
@@ -596,215 +611,208 @@ def tea_hydrogen_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_t
     im_share_tonmi = hydrogen_tonmi['IM'] / hydrogen_tonmi['TOTAL'] if hydrogen_tonmi['TOTAL'] != 0 else 0
 
     for n in G:
-        if G.nodes[n]['facility'] == 1:
+        if G.nodes[n]['facility'][time_step] == 1:
             # must supply the number of batteries of 10 MWh effective capacity that need to be charged
-            G.nodes[n]['energy_source_TEA'] = tea_hydrogen(int(G.nodes[n]['peak']['number_loc']),
-                                                           int(G.nodes[n]['avg']['number_loc']),
-                                                           G.nodes[n]['avg']['daily_supply_kgh2'],
-                                                           max_util=max_util, station_type=station_type,
-                                                           clean_energy_dolkg=clean_energy_cost)
-            if G.nodes[n]['avg']['energy_transfer']:
-                G.nodes[n]['energy_source_TEA'].update(dict(
+            G.nodes[n]['energy_source_TEA'][time_step] = tea_hydrogen(int(G.nodes[n]['avg'][time_step]['number_loc']),
+                                                                      int(G.nodes[n]['avg'][time_step]['number_loc']),
+                                                                      G.nodes[n]['avg'][time_step]['daily_supply_kgh2'],
+                                                                      max_util=max_util, station_type=station_type,
+                                                                      clean_energy_dolkg=clean_energy_cost)
+            if 'energy_transfer' in G.nodes[n]['avg'][time_step].keys() and \
+                    G.nodes[n]['avg'][time_step]['energy_transfer']:
+                G.nodes[n]['energy_source_TEA'][time_step].update(dict(
                     pump_time=0,
                     avg_queue_time_p_loc=0,
                     avg_queue_length=0,
-                    peak_queue_time_p_loc=0,
-                    peak_queue_length=0,
                     avg_daily_delay_cost_p_car=0,
                     avg_daily_delay_cost_p_loc=0,
                     total_daily_delay_cost=0
                 ))
             else:
-                pump_time = G.nodes[n]['energy_source_TEA']['pump_time']
-                lq_avg, wq_avg = queue_model(G.nodes[n]['avg']['number_loc'] / 24,
+                pump_time = G.nodes[n]['energy_source_TEA'][time_step]['pump_time']
+                lq_avg, wq_avg = queue_model(G.nodes[n]['avg'][time_step]['number_loc'] / 24,
                                              1 / pump_time,
-                                             G.nodes[n]['energy_source_TEA']['number_pumps'])
-                lq_peak, wq_peak = queue_model(G.nodes[n]['peak']['number_loc'] / 24,
-                                               1 / pump_time,
-                                               G.nodes[n]['energy_source_TEA']['number_pumps'])
-                G.nodes[n]['energy_source_TEA'].update(dict(
+                                             G.nodes[n]['energy_source_TEA'][time_step]['number_pumps'])
+                G.nodes[n]['energy_source_TEA'][time_step].update(dict(
                     pump_time=pump_time,
                     avg_queue_time_p_loc=wq_avg,
                     avg_queue_length=lq_avg,
-                    peak_queue_time_p_loc=wq_peak,
-                    peak_queue_length=lq_peak,
                     avg_daily_delay_cost_p_car=(pump_time + wq_avg) * car_dol_hr,
                     avg_daily_delay_cost_p_loc=((pump_time + wq_avg) * car_dol_hr *
                                                 (rr_v['car/train'] / rr_v['loc/train'])),
                     total_daily_delay_cost=((car_dol_hr + (car_dol_hr_im - car_dol_hr) * im_share_tonmi) *
-                                            (pump_time + wq_avg) *
-                                            (rr_v['car/train'] / rr_v['loc/train']) * G.nodes[n]['avg']['number_loc'])
+                                            (pump_time + wq_avg) * (rr_v['car/train'] / rr_v['loc/train']) *
+                                            G.nodes[n]['avg'][time_step]['number_loc'])
                 ))
         else:
-            G.nodes[n]['energy_source_TEA'] = tea_hydrogen(0, 0, 0, max_util=max_util)
-            G.nodes[n]['energy_source_TEA'].update(dict(
+            G.nodes[n]['energy_source_TEA'][time_step] = tea_hydrogen(0, 0, 0, max_util=max_util)
+            G.nodes[n]['energy_source_TEA'][time_step].update(dict(
                 pump_time=0,
                 avg_queue_time_p_loc=0,
                 avg_queue_length=0,
-                peak_queue_time_p_loc=0,
-                peak_queue_length=0,
                 avg_daily_delay_cost_p_car=0,
                 avg_daily_delay_cost_p_loc=0,
                 total_daily_delay_cost=0
             ))
 
-    pump_time = max([G.nodes[n]['energy_source_TEA']['pump_time'] for n in G])
+    pump_time = max([G.nodes[n]['energy_source_TEA'][time_step]['pump_time'] for n in G])
     # compute aggregate statistics for tech. deployment
     # use the percentage of ton-mi increase to calculate all in terms of baseline ton-miles
 
-    avg_tot_loc = sum([G.nodes[n]['avg']['number_loc'] for n in G if G.nodes[n]['facility']])
+    avg_tot_loc = sum([G.nodes[n]['avg'][time_step]['number_loc'] for n in G if G.nodes[n]['facility'][time_step]])
     if round(avg_tot_loc) == 0:
         avg_tot_loc = 0
-    peak_tot_loc = sum([G.nodes[n]['peak']['number_loc'] for n in G if G.nodes[n]['facility']])
-    if round(peak_tot_loc) == 0:
-        peak_tot_loc = 0
 
-    support_diesel_tonmi = {c: sum([G.edges[u, v]['support_diesel_avg_ton'][c] * G.edges[u, v]['miles']
-                                    for u, v in G.edges]) * tonmi_deflation_factor[c] for c in comm_list}
-    support_diesel_gal = {c: sum([G.edges[u, v]['support_diesel_avg_gal'][c] for u, v in G.edges]) for c in comm_list}
+    support_diesel_tonmi = {c: sum([G.edges[u, v]['support_diesel_avg_ton'][time_step][c] * G.edges[u, v]['miles']
+                                    for u, v in G.edges]) for c in comm_list}
+    support_diesel_gal = {c: sum([G.edges[u, v]['support_diesel_avg_gal'][time_step][c] for u, v in G.edges])
+                          for c in comm_list}
     baseline_total_tonmi = {c: hydrogen_tonmi[c] + support_diesel_tonmi[c] for c in comm_list}
     baseline_total_tonmi.update({c: baseline_total_tonmi[c] if baseline_total_tonmi[c] > 0 else 1 for c in comm_list})
 
-    avg_hydrogen_energy_kgh2 = {c: sum(G.edges[u, v]['hydrogen_avg_kgh2'][c] for u, v in G.edges) for c in comm_list}
-    peak_hydrogen_energy_kgh2 = {c: sum(G.edges[u, v]['hydrogen_peak_kgh2'][c] for u, v in G.edges) for c in comm_list}
+    avg_hydrogen_energy_kgh2 = {c: sum(G.edges[u, v]['hydrogen_avg_kgh2'][time_step][c] for u, v in G.edges)
+                                for c in comm_list}
 
-    tender_LCO_tonmi = rr_v[station_type + ' tender $/ton-mile']
+    if tender_cost_p_tonmi is None:
+        tender_cost_p_tonmi = rr_v[station_type + ' tender $/ton-mile']
     # convert to battery $/kWh
-    tender_LCO_kgh2 = {c: tender_LCO_tonmi * hydrogen_tonmi[c] / avg_hydrogen_energy_kgh2[c]
-    if avg_hydrogen_energy_kgh2[c] > 0 else 0 for c in comm_list}
+    tender_LCO_kgh2 = {c: (tender_cost_p_tonmi * hydrogen_tonmi[c] /
+                           avg_hydrogen_energy_kgh2[c]) if avg_hydrogen_energy_kgh2[c] > 0 else 0 for c in comm_list}
 
     if diesel_cost_p_gal is None:
         # load dataframe for cost factors of diesel: index is fuel_type, column is value in [$/gal]
-        df_dropin = load_tea_dropin_lookup()
-        diesel_factor = df_dropin.loc['diesel', '$/gal']
+        diesel_factor = load_diesel_prices_mp().loc[int(time_step)].item()
     else:
         diesel_factor = diesel_cost_p_gal
 
-    G.graph['energy_source_TEA'] = dict(
+    G.graph['energy_source_TEA'][time_step] = dict(
         # avg station_LCO per kWh should be the total cost of the station (from peak value) over the avg usage
         station_LCO_kgh2=dict(zip(
             comm_list,
-            [sum([G.nodes[n]['energy_source_TEA']['station_LCO'] * G.nodes[n]['peak']['daily_supply_kgh2']
-                  for n in G]) / avg_hydrogen_energy_kgh2['TOTAL'] for c in comm_list])),
+            [sum([G.nodes[n]['energy_source_TEA'][time_step]['station_LCO'] *
+                  G.nodes[n]['avg'][time_step]['daily_supply_kgh2'] for n in G]) / avg_hydrogen_energy_kgh2['TOTAL']
+             for c in comm_list])),
         terminal_LCO_kgh2=dict(zip(
             comm_list,
-            [sum([G.nodes[n]['energy_source_TEA']['terminal_LCO'] * G.nodes[n]['avg']['daily_supply_kgh2']
-                  for n in G]) / avg_hydrogen_energy_kgh2['TOTAL'] for c in comm_list])),
+            [sum([G.nodes[n]['energy_source_TEA'][time_step]['terminal_LCO'] *
+                  G.nodes[n]['avg'][time_step]['daily_supply_kgh2'] for n in G]) / avg_hydrogen_energy_kgh2['TOTAL']
+             for c in comm_list])),
         liquefier_LCO_kgh2=dict(zip(
             comm_list,
-            [sum([G.nodes[n]['energy_source_TEA']['liquefier_LCO'] * G.nodes[n]['avg']['daily_supply_kgh2']
+            [sum([G.nodes[n]['energy_source_TEA'][time_step]['liquefier_LCO'] *
+                  G.nodes[n]['avg'][time_step]['daily_supply_kgh2']
                   for n in G]) / avg_hydrogen_energy_kgh2['TOTAL'] for c in comm_list])),
         fuel_LCO_kgh2=dict(zip(
             comm_list,
-            [sum([G.nodes[n]['energy_source_TEA']['fuel_LCO'] * G.nodes[n]['avg']['daily_supply_kgh2']
+            [sum([G.nodes[n]['energy_source_TEA'][time_step]['fuel_LCO'] *
+                  G.nodes[n]['avg'][time_step]['daily_supply_kgh2']
                   for n in G]) / avg_hydrogen_energy_kgh2['TOTAL'] for c in comm_list])),
         tender_LCO_kgh2=tender_LCO_kgh2,
         delay_LCO_kgh2=dict(zip(
             comm_list,
-            [sum([G.nodes[n]['energy_source_TEA']['total_daily_delay_cost'] for n in G]) /
+            [sum([G.nodes[n]['energy_source_TEA'][time_step]['total_daily_delay_cost'] for n in G]) /
              avg_hydrogen_energy_kgh2['TOTAL'] for c in comm_list])),
         total_LCO_kgh2=dict(zip(
             comm_list,
-            [sum([G.nodes[n]['energy_source_TEA']['total_LCO'] * G.nodes[n]['avg']['daily_supply_kgh2'] +
-                  G.nodes[n]['energy_source_TEA']['total_daily_delay_cost'] for n in G]) /
+            [sum([G.nodes[n]['energy_source_TEA'][time_step]['total_LCO'] *
+                  G.nodes[n]['avg'][time_step]['daily_supply_kgh2'] +
+                  G.nodes[n]['energy_source_TEA'][time_step]['total_daily_delay_cost'] for n in G]) /
              avg_hydrogen_energy_kgh2['TOTAL'] + tender_LCO_kgh2[c] for c in comm_list])),
-        station_annual_cost=365 * sum([G.nodes[n]['energy_source_TEA']['station_LCO'] *
-                                       G.nodes[n]['peak']['daily_supply_kgh2'] for n in G]),
-        station_total=(sum([G.nodes[n]['energy_source_TEA']['station_total'] for n in G])),
-        actual_utilization=(sum([G.nodes[n]['energy_source_TEA']['actual_utilization'] *
-                                 G.nodes[n]['energy_source_TEA']['daily_energy_kgh2'] for n in G]) /
+        station_annual_cost=365 * sum([G.nodes[n]['energy_source_TEA'][time_step]['station_LCO'] *
+                                       G.nodes[n]['avg'][time_step]['daily_supply_kgh2'] for n in G]),
+        station_total=(sum([G.nodes[n]['energy_source_TEA'][time_step]['station_total'] for n in G])),
+        actual_utilization=(sum([G.nodes[n]['energy_source_TEA'][time_step]['actual_utilization'] *
+                                 G.nodes[n]['energy_source_TEA'][time_step]['daily_energy_kgh2'] for n in G]) /
                             avg_hydrogen_energy_kgh2['TOTAL']),
-        number_pumps=sum([G.nodes[n]['energy_source_TEA']['number_pumps'] for n in G]),
-        pump_per_station=round((sum([G.nodes[n]['energy_source_TEA']['number_pumps'] *
-                                     G.nodes[n]['energy_source_TEA']['daily_energy_kgh2'] for n in G]) /
+        number_pumps=sum([G.nodes[n]['energy_source_TEA'][time_step]['number_pumps'] for n in G]),
+        pump_per_station=round((sum([G.nodes[n]['energy_source_TEA'][time_step]['number_pumps'] *
+                                     G.nodes[n]['energy_source_TEA'][time_step]['daily_energy_kgh2'] for n in G]) /
                                 avg_hydrogen_energy_kgh2['TOTAL']), 1),
-        daily_energy_kgh2=sum([G.nodes[n]['energy_source_TEA']['daily_energy_kgh2'] for n in G]),
-        annual_energy_kgh2=sum([G.nodes[n]['energy_source_TEA']['annual_energy_kgh2'] for n in G]),
+        daily_energy_kgh2=sum([G.nodes[n]['energy_source_TEA'][time_step]['daily_energy_kgh2'] for n in G]),
+        annual_energy_kgh2=sum([G.nodes[n]['energy_source_TEA'][time_step]['annual_energy_kgh2'] for n in G]),
         pump_time=pump_time,
-        avg_queue_time_p_loc=(sum([G.nodes[n]['energy_source_TEA']['avg_queue_time_p_loc'] *
-                                   G.nodes[n]['avg']['number_loc'] for n in G if G.nodes[n]['facility']]) /
-                              avg_tot_loc),
-        avg_queue_length=(sum([G.nodes[n]['energy_source_TEA']['avg_queue_length'] *
-                               G.nodes[n]['avg']['number_loc'] for n in G if G.nodes[n]['facility']]) / avg_tot_loc),
-        peak_queue_time_p_loc=(sum([G.nodes[n]['energy_source_TEA']['peak_queue_time_p_loc'] *
-                                    G.nodes[n]['peak']['number_loc'] for n in G if G.nodes[n]['facility']])
-                               / peak_tot_loc),
-        peak_queue_length=(sum([G.nodes[n]['energy_source_TEA']['peak_queue_length'] *
-                                G.nodes[n]['peak']['number_loc'] for n in G if G.nodes[n]['facility']])
-                           / peak_tot_loc),
-        avg_daily_delay_cost_p_car=(sum([G.nodes[n]['energy_source_TEA']['avg_daily_delay_cost_p_car'] *
-                                         G.nodes[n]['avg']['number_loc'] for n in G if G.nodes[n]['facility']]) /
-                                    avg_tot_loc),
-        total_daily_delay_cost=sum([G.nodes[n]['energy_source_TEA']['total_daily_delay_cost'] for n in G]),
-        total_annual_delay_cost=365 * sum([G.nodes[n]['energy_source_TEA']['total_daily_delay_cost'] for n in G])
+        avg_queue_time_p_loc=(sum([G.nodes[n]['energy_source_TEA'][time_step]['avg_queue_time_p_loc'] *
+                                   G.nodes[n]['avg'][time_step]['number_loc']
+                                   for n in G if G.nodes[n]['facility'][time_step]]) / avg_tot_loc),
+        avg_queue_length=(sum([G.nodes[n]['energy_source_TEA'][time_step]['avg_queue_length'] *
+                               G.nodes[n]['avg'][time_step]['number_loc']
+                               for n in G if G.nodes[n]['facility'][time_step]]) / avg_tot_loc),
+        avg_daily_delay_cost_p_car=(sum([G.nodes[n]['energy_source_TEA'][time_step]['avg_daily_delay_cost_p_car'] *
+                                         G.nodes[n]['avg'][time_step]['number_loc']
+                                         for n in G if G.nodes[n]['facility'][time_step]]) / avg_tot_loc),
+        total_daily_delay_cost=sum([G.nodes[n]['energy_source_TEA'][time_step]['total_daily_delay_cost'] for n in G]),
+        total_annual_delay_cost=365 * sum([G.nodes[n]['energy_source_TEA'][time_step]['total_daily_delay_cost']
+                                           for n in G])
     )
 
-    G.graph['energy_source_TEA'].update(dict(
+    G.graph['energy_source_TEA'][time_step].update(dict(
         # avg station_LCO per tonmi should be the total cost of the station (from peak value) over the battery tonmi
         station_LCO_tonmi=dict(zip(
             comm_list,
-            [G.graph['energy_source_TEA']['station_LCO_kgh2'][c] * peak_hydrogen_energy_kgh2[c] / hydrogen_tonmi[c]
-             for c in comm_list])),
+            [G.graph['energy_source_TEA'][time_step]['station_LCO_kgh2'][c] * avg_hydrogen_energy_kgh2[c] /
+             hydrogen_tonmi[c] for c in comm_list])),
         terminal_LCO_tonmi=dict(zip(
             comm_list,
-            [G.graph['energy_source_TEA']['terminal_LCO_kgh2'][c] * peak_hydrogen_energy_kgh2[c] / hydrogen_tonmi[c]
-             for c in comm_list])),
+            [G.graph['energy_source_TEA'][time_step]['terminal_LCO_kgh2'][c] * avg_hydrogen_energy_kgh2[c] /
+             hydrogen_tonmi[c] for c in comm_list])),
         liquefier_LCO_tonmi=dict(zip(
             comm_list,
-            [G.graph['energy_source_TEA']['liquefier_LCO_kgh2'][c] * peak_hydrogen_energy_kgh2[c] / hydrogen_tonmi[c]
-             for c in comm_list])),
+            [G.graph['energy_source_TEA'][time_step]['liquefier_LCO_kgh2'][c] * avg_hydrogen_energy_kgh2[c] /
+             hydrogen_tonmi[c] for c in comm_list])),
         fuel_LCO_tonmi=dict(zip(
             comm_list,
-            [G.graph['energy_source_TEA']['fuel_LCO_kgh2'][c] * avg_hydrogen_energy_kgh2[c] / hydrogen_tonmi[c]
-             for c in comm_list])),
-        tender_LCO_tonmi={c: tender_LCO_tonmi for c in comm_list},
+            [G.graph['energy_source_TEA'][time_step]['fuel_LCO_kgh2'][c] * avg_hydrogen_energy_kgh2[c] /
+             hydrogen_tonmi[c] for c in comm_list])),
+        tender_LCO_tonmi={c: tender_cost_p_tonmi for c in comm_list},
         delay_LCO_tonmi=dict(zip(
             comm_list,
-            [G.graph['energy_source_TEA']['delay_LCO_kgh2'][c] * avg_hydrogen_energy_kgh2[c] / hydrogen_tonmi[c]
-             for c in comm_list]))
+            [G.graph['energy_source_TEA'][time_step]['delay_LCO_kgh2'][c] * avg_hydrogen_energy_kgh2[c] /
+             hydrogen_tonmi[c] for c in comm_list]))
     ))
 
-    G.graph['energy_source_TEA'].update(dict(
-        total_LCO_tonmi={c: (G.graph['energy_source_TEA']['station_LCO_tonmi'][c] +
-                             G.graph['energy_source_TEA']['terminal_LCO_tonmi'][c] +
-                             G.graph['energy_source_TEA']['liquefier_LCO_tonmi'][c] +
-                             G.graph['energy_source_TEA']['fuel_LCO_tonmi'][c] +
-                             G.graph['energy_source_TEA']['tender_LCO_tonmi'][c] +
-                             G.graph['energy_source_TEA']['delay_LCO_tonmi'][c]) for c in comm_list},
-        total_scenario_LCO_tonmi={c: ((G.graph['energy_source_TEA']['station_LCO_tonmi'][c] +
-                                       G.graph['energy_source_TEA']['terminal_LCO_tonmi'][c] +
-                                       G.graph['energy_source_TEA']['liquefier_LCO_tonmi'][c] +
-                                       G.graph['energy_source_TEA']['fuel_LCO_tonmi'][c] +
-                                       G.graph['energy_source_TEA']['tender_LCO_tonmi'][c] +
-                                       G.graph['energy_source_TEA']['delay_LCO_tonmi'][c]) * hydrogen_tonmi[c] +
+    G.graph['energy_source_TEA'][time_step].update(dict(
+        total_LCO_tonmi={c: (G.graph['energy_source_TEA'][time_step]['station_LCO_tonmi'][c] +
+                             G.graph['energy_source_TEA'][time_step]['terminal_LCO_tonmi'][c] +
+                             G.graph['energy_source_TEA'][time_step]['liquefier_LCO_tonmi'][c] +
+                             G.graph['energy_source_TEA'][time_step]['fuel_LCO_tonmi'][c] +
+                             G.graph['energy_source_TEA'][time_step]['tender_LCO_tonmi'][c] +
+                             G.graph['energy_source_TEA'][time_step]['delay_LCO_tonmi'][c]) for c in comm_list},
+        total_scenario_LCO_tonmi={c: ((G.graph['energy_source_TEA'][time_step]['station_LCO_tonmi'][c] +
+                                       G.graph['energy_source_TEA'][time_step]['terminal_LCO_tonmi'][c] +
+                                       G.graph['energy_source_TEA'][time_step]['liquefier_LCO_tonmi'][c] +
+                                       G.graph['energy_source_TEA'][time_step]['fuel_LCO_tonmi'][c] +
+                                       G.graph['energy_source_TEA'][time_step]['tender_LCO_tonmi'][c] +
+                                       G.graph['energy_source_TEA'][time_step]['delay_LCO_tonmi'][c]) *
+                                      hydrogen_tonmi[c] +
                                       diesel_factor * support_diesel_gal[c]) / baseline_total_tonmi[c]
                                   for c in comm_list},
-        total_nodelay_LCO_tonmi={c: (G.graph['energy_source_TEA']['station_LCO_tonmi'][c] +
-                                     G.graph['energy_source_TEA']['terminal_LCO_tonmi'][c] +
-                                     G.graph['energy_source_TEA']['liquefier_LCO_tonmi'][c] +
-                                     G.graph['energy_source_TEA']['fuel_LCO_tonmi'][c] +
-                                     G.graph['energy_source_TEA']['tender_LCO_tonmi'][c]) for c in comm_list},
-        total_scenario_nodelay_LCO_tonmi={c: ((G.graph['energy_source_TEA']['station_LCO_tonmi'][c] +
-                                               G.graph['energy_source_TEA']['terminal_LCO_tonmi'][c] +
-                                               G.graph['energy_source_TEA']['liquefier_LCO_tonmi'][c] +
-                                               G.graph['energy_source_TEA']['fuel_LCO_tonmi'][c] +
-                                               G.graph['energy_source_TEA']['tender_LCO_tonmi'][c]) *
+        total_nodelay_LCO_tonmi={c: (G.graph['energy_source_TEA'][time_step]['station_LCO_tonmi'][c] +
+                                     G.graph['energy_source_TEA'][time_step]['terminal_LCO_tonmi'][c] +
+                                     G.graph['energy_source_TEA'][time_step]['liquefier_LCO_tonmi'][c] +
+                                     G.graph['energy_source_TEA'][time_step]['fuel_LCO_tonmi'][c] +
+                                     G.graph['energy_source_TEA'][time_step]['tender_LCO_tonmi'][c])
+                                 for c in comm_list},
+        total_scenario_nodelay_LCO_tonmi={c: ((G.graph['energy_source_TEA'][time_step]['station_LCO_tonmi'][c] +
+                                               G.graph['energy_source_TEA'][time_step]['terminal_LCO_tonmi'][c] +
+                                               G.graph['energy_source_TEA'][time_step]['liquefier_LCO_tonmi'][c] +
+                                               G.graph['energy_source_TEA'][time_step]['fuel_LCO_tonmi'][c] +
+                                               G.graph['energy_source_TEA'][time_step]['tender_LCO_tonmi'][c]) *
                                               hydrogen_tonmi[c] + diesel_factor *
                                               support_diesel_gal[c]) / baseline_total_tonmi[c] for c in comm_list},
-        annual_hydrogen_total_cost={c: 365 * (G.graph['energy_source_TEA']['station_LCO_tonmi'][c] +
-                                              G.graph['energy_source_TEA']['terminal_LCO_tonmi'][c] +
-                                              G.graph['energy_source_TEA']['liquefier_LCO_tonmi'][c] +
-                                              G.graph['energy_source_TEA']['fuel_LCO_tonmi'][c] +
-                                              G.graph['energy_source_TEA']['tender_LCO_tonmi'][c]) * hydrogen_tonmi[c]
-                                    for c in comm_list},
+        annual_hydrogen_total_cost={c: 365 * (G.graph['energy_source_TEA'][time_step]['station_LCO_tonmi'][c] +
+                                              G.graph['energy_source_TEA'][time_step]['terminal_LCO_tonmi'][c] +
+                                              G.graph['energy_source_TEA'][time_step]['liquefier_LCO_tonmi'][c] +
+                                              G.graph['energy_source_TEA'][time_step]['fuel_LCO_tonmi'][c] +
+                                              G.graph['energy_source_TEA'][time_step]['tender_LCO_tonmi'][c]) *
+                                       hydrogen_tonmi[c] for c in comm_list},
         annual_support_diesel_total_cost={c: 365 * diesel_factor * support_diesel_gal[c] for c in comm_list},
-        annual_total_cost={c: 365 * ((G.graph['energy_source_TEA']['station_LCO_tonmi'][c] +
-                                      G.graph['energy_source_TEA']['terminal_LCO_tonmi'][c] +
-                                      G.graph['energy_source_TEA']['liquefier_LCO_tonmi'][c] +
-                                      G.graph['energy_source_TEA']['fuel_LCO_tonmi'][c] +
-                                      G.graph['energy_source_TEA']['tender_LCO_tonmi'][c] +
-                                      G.graph['energy_source_TEA']['delay_LCO_tonmi'][c]) * hydrogen_tonmi[c] +
-                                     diesel_factor * support_diesel_gal[c]) for c in comm_list}
+        annual_total_cost={c: 365 * ((G.graph['energy_source_TEA'][time_step]['station_LCO_tonmi'][c] +
+                                      G.graph['energy_source_TEA'][time_step]['terminal_LCO_tonmi'][c] +
+                                      G.graph['energy_source_TEA'][time_step]['liquefier_LCO_tonmi'][c] +
+                                      G.graph['energy_source_TEA'][time_step]['fuel_LCO_tonmi'][c] +
+                                      G.graph['energy_source_TEA'][time_step]['tender_LCO_tonmi'][c] +
+                                      G.graph['energy_source_TEA'][time_step]['delay_LCO_tonmi'][c]) *
+                                     hydrogen_tonmi[c] + diesel_factor * support_diesel_gal[c]) for c in comm_list}
     ))
 
     return G
@@ -953,7 +961,6 @@ def tea_diesel_step_mp(G: nx.DiGraph, time_step: str):
 
 def tea_dropin_mp(G: nx.DiGraph, time_horizon: list, fuel_type: str, deployment_perc: float,
                   scenario_fuel_type: str = None, diesel_cost_p_gal: float = None):
-
     for e in G.edges:
         G.edges[e][fuel_type + '_TEA'] = {t: dict() for t in time_horizon}
 

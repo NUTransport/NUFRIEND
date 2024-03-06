@@ -12,8 +12,8 @@ purple, mid_purple, light_purple, green1, green2, green3, green4, green5, red, l
 c = plotly.colors.qualitative.G10
 
 
-def plot_battery_facility_location(G, time_horizon, crs='WGS84', additional_plots=False, nested=True, max_flow=False,
-                                   colors=False, time_step_label=False, title=None, fig=None):
+def plot_dynamic_network_results_mp(G, time_horizon, fuel_type, crs='WGS84', additional_plots=False, max_flow=False,
+                                    colors=False, time_step_label=False, title=None, fig=None):
     if fig is None:
         if additional_plots:
             fig = make_subplots(
@@ -45,9 +45,10 @@ def plot_battery_facility_location(G, time_horizon, crs='WGS84', additional_plot
         # Trace 0: baseline edges
         fig.add_trace(plot_base_edges(edges_gdf), row=1, col=2)
         # Trace 1: edges trace for first time_step
-        fig.add_trace(plot_edges(edges_gdf, time_idx=0, time_horizon=time_horizon), row=1, col=2)
+        fig.add_trace(plot_edges(edges_gdf, time_idx=0, time_horizon=time_horizon, fuel_type=fuel_type), row=1, col=2)
         # Trace 2: nodes - facility trace for first time_step
-        fig.add_trace(plot_facility_nodes(nodes_gdf, time_idx=0, time_horizon=time_horizon), row=1, col=2)
+        fig.add_trace(plot_facility_nodes(nodes_gdf, time_idx=0, time_horizon=time_horizon, fuel_type=fuel_type),
+                      row=1, col=2)
         # Trace 3: nodes - covered trace for first time_step
         fig.add_trace(plot_covered_nodes(nodes_gdf, time_idx=0, time_horizon=time_horizon), row=1, col=2)
         # Trace 4: scenario summary table
@@ -55,9 +56,9 @@ def plot_battery_facility_location(G, time_horizon, crs='WGS84', additional_plot
                       row=1, col=1)
 
         frames = [go.Frame(data=[plot_edges(edges_gdf=edges_gdf, time_idx=ti, time_horizon=time_horizon,
-                                            color=c[ti] if colors else None),
+                                            fuel_type=fuel_type, color=c[ti] if colors else None),
                                  plot_facility_nodes(nodes_gdf=nodes_gdf, time_idx=ti, time_horizon=time_horizon,
-                                                     color=c[ti] if colors else None),
+                                                     fuel_type=fuel_type, color=c[ti] if colors else None),
                                  plot_covered_nodes(nodes_gdf=nodes_gdf, time_idx=ti, time_horizon=time_horizon,
                                                     color=c[ti] if colors else None),
                                  plot_facility_location_summary_table(G=G, time_step=ts, max_flow=max_flow)],
@@ -113,16 +114,17 @@ def plot_battery_facility_location(G, time_horizon, crs='WGS84', additional_plot
         fig.update(frames=frames)
     else:
         # edges trace for first time_step
-        fig.add_trace(plot_edges(edges_gdf, time_idx=0, time_horizon=time_horizon), row=1, col=1)
+        fig.add_trace(plot_edges(edges_gdf, time_idx=0, time_horizon=time_horizon, fuel_type=fuel_type), row=1, col=1)
         # nodes - facility trace for first time_step
-        fig.add_trace(plot_facility_nodes(nodes_gdf, time_idx=0, time_horizon=time_horizon), row=1, col=1)
+        fig.add_trace(plot_facility_nodes(nodes_gdf, time_idx=0, time_horizon=time_horizon, fuel_type=fuel_type),
+                      row=1, col=1)
         # nodes - covered trace for first time_step
         fig.add_trace(plot_covered_nodes(nodes_gdf, time_idx=0, time_horizon=time_horizon), row=1, col=1)
 
         frames = [go.Frame(data=[plot_edges(edges_gdf=edges_gdf, time_idx=ti, time_horizon=time_horizon,
-                                            color=c[ti] if colors else None),
+                                            fuel_type=fuel_type, color=c[ti] if colors else None),
                                  plot_facility_nodes(nodes_gdf=nodes_gdf, time_idx=ti, time_horizon=time_horizon,
-                                                     color=c[ti] if colors else None),
+                                                     fuel_type=fuel_type, color=c[ti] if colors else None),
                                  plot_covered_nodes(nodes_gdf=nodes_gdf, time_idx=ti, time_horizon=time_horizon,
                                                     color=c[ti] if colors else None)])
                   for ti, ts in enumerate(time_horizon)]
@@ -138,8 +140,7 @@ def plot_battery_facility_location(G, time_horizon, crs='WGS84', additional_plot
     return fig
 
 
-def plot_battery_facility_location_static(G, time_horizon, title=None, crs='WGS84', fig=None):
-
+def plot_composite_network_results_mp(G, time_horizon, fuel_type, title=None, crs='WGS84', fig=None):
     if fig is None:
         t0 = time.time()
         fig = base_plot(G.graph['railroad'])
@@ -151,13 +152,14 @@ def plot_battery_facility_location_static(G, time_horizon, title=None, crs='WGS8
     print('GDF EXTRACTION:: ' + str(time.time() - t0))
 
     for ti, ts in enumerate(time_horizon):
-        fig.add_trace(plot_edges(edges_gdf, time_idx=ti, time_horizon=time_horizon, color=c[ti], incremental=True))
-        fig.add_trace(plot_covered_nodes(nodes_gdf, time_idx=ti, time_horizon=time_horizon, color=c[ti],
-                                         incremental=True))
+        fig.add_trace(plot_edges(edges_gdf, time_idx=ti, time_horizon=time_horizon, fuel_type=fuel_type,
+                                 color=c[ti], incremental=True))
+        fig.add_trace(plot_covered_nodes(nodes_gdf, time_idx=ti, time_horizon=time_horizon,
+                                         color=c[ti], incremental=True))
 
     for ti, ts in enumerate(time_horizon):
-        fig.add_trace(plot_facility_nodes(nodes_gdf, time_idx=ti, time_horizon=time_horizon, color=c[ti],
-                                          incremental=True))
+        fig.add_trace(plot_facility_nodes(nodes_gdf, time_idx=ti, time_horizon=time_horizon, fuel_type=fuel_type,
+                                          color=c[ti], incremental=True))
 
     fig.update_geos(projection_type="albers usa")
 
@@ -215,7 +217,7 @@ def plot_base_edges(edges_gdf):
     return g
 
 
-def plot_edges(edges_gdf, time_idx, time_horizon, color=None, incremental=False):
+def plot_edges(edges_gdf, time_idx, time_horizon, fuel_type, color=None, incremental=False):
     edges_gdf = edges_gdf.copy()
 
     if incremental:
@@ -231,8 +233,7 @@ def plot_edges(edges_gdf, time_idx, time_horizon, color=None, incremental=False)
         edges_gdf.drop(index=[i for i in edges_gdf.index if not edges_gdf.loc[i, 'covered'][time_horizon[time_idx]]],
                        inplace=True)
 
-    legend_name = 'Battery Network ' + time_horizon[time_idx]
-    lg_group = 1
+    legend_name = '{v0} Network {v1}'.format(v0=fuel_type.capitalize(), v1=time_horizon[time_idx])
 
     lats = []
     lons = []
@@ -268,7 +269,7 @@ def plot_edges(edges_gdf, time_idx, time_horizon, color=None, incremental=False)
     return g
 
 
-def plot_facility_nodes(nodes_gdf, time_idx, time_horizon, color=None, incremental=False):
+def plot_facility_nodes(nodes_gdf, time_idx, time_horizon, fuel_type, color=None, incremental=False):
     legend_name = 'Selected Facility'
     lg_group = 1
 
@@ -285,11 +286,16 @@ def plot_facility_nodes(nodes_gdf, time_idx, time_horizon, color=None, increment
                     lats = np.append(lats, y)
                     lons = np.append(lons, x)
                     if 'avg' in nodes_gdf.columns:
-                        name = '{v1}, {v2} <br> {v3} <br> {v4} MWh/yr'.format(v1=nodes_gdf.loc[n, 'city'],
-                                                                              v2=nodes_gdf.loc[n, 'state'],
-                                                                              v3=nodes_gdf.loc[n, 'nodeid'],
-                                                                              v4=round(nodes_gdf.loc[n, 'avg'][t_step][
-                                                                                           'daily_supply_mwh']))
+                        if fuel_type == 'battery':
+                            name = '{v1}, {v2} <br> {v3} <br> {v4} MWh/day'.format(
+                                v1=nodes_gdf.loc[n, 'city'], v2=nodes_gdf.loc[n, 'state'],
+                                v3=nodes_gdf.loc[n, 'nodeid'],
+                                v4=round(nodes_gdf.loc[n, 'avg'][t_step]['daily_supply_mwh']))
+                        else:
+                            name = '{v1}, {v2} <br> {v3} <br> {v4} kgH<sub>2</sub>/day'.format(
+                                v1=nodes_gdf.loc[n, 'city'], v2=nodes_gdf.loc[n, 'state'],
+                                v3=nodes_gdf.loc[n, 'nodeid'],
+                                v4=round(nodes_gdf.loc[n, 'avg'][t_step]['daily_supply_kgh2']))
                     else:
                         name = '{v1}, {v2} <br> {v3}'.format(v1=nodes_gdf.loc[n, 'city'],
                                                              v2=nodes_gdf.loc[n, 'state'],
@@ -302,11 +308,16 @@ def plot_facility_nodes(nodes_gdf, time_idx, time_horizon, color=None, increment
                     lats = np.append(lats, y)
                     lons = np.append(lons, x)
                     if 'avg' in nodes_gdf.columns:
-                        name = '{v1}, {v2} <br> {v3} <br> {v4} MWh/yr'.format(v1=nodes_gdf.loc[n, 'city'],
-                                                                              v2=nodes_gdf.loc[n, 'state'],
-                                                                              v3=nodes_gdf.loc[n, 'nodeid'],
-                                                                              v4=round(nodes_gdf.loc[n, 'avg'][t_step][
-                                                                                           'daily_supply_mwh']))
+                        if fuel_type == 'battery':
+                            name = '{v1}, {v2} <br> {v3} <br> {v4} MWh/day'.format(
+                                v1=nodes_gdf.loc[n, 'city'], v2=nodes_gdf.loc[n, 'state'],
+                                v3=nodes_gdf.loc[n, 'nodeid'],
+                                v4=round(nodes_gdf.loc[n, 'avg'][t_step]['daily_supply_mwh']))
+                        else:
+                            name = '{v1}, {v2} <br> {v3} <br> {v4} kgH<sub>2</sub>/day'.format(
+                                v1=nodes_gdf.loc[n, 'city'], v2=nodes_gdf.loc[n, 'state'],
+                                v3=nodes_gdf.loc[n, 'nodeid'],
+                                v4=round(nodes_gdf.loc[n, 'avg'][t_step]['daily_supply_kgh2']))
                     else:
                         name = '{v1}, {v2} <br> {v3}'.format(v1=nodes_gdf.loc[n, 'city'],
                                                              v2=nodes_gdf.loc[n, 'state'],
@@ -318,11 +329,16 @@ def plot_facility_nodes(nodes_gdf, time_idx, time_horizon, color=None, increment
                 lats = np.append(lats, y)
                 lons = np.append(lons, x)
                 if 'avg' in nodes_gdf.columns:
-                    name = '{v1}, {v2} <br> {v3} <br> {v4} MWh/yr'.format(v1=nodes_gdf.loc[n, 'city'],
-                                                                          v2=nodes_gdf.loc[n, 'state'],
-                                                                          v3=nodes_gdf.loc[n, 'nodeid'],
-                                                                          v4=round(nodes_gdf.loc[n, 'avg'][t_step][
-                                                                                       'daily_supply_mwh']))
+                    if fuel_type == 'battery':
+                        name = '{v1}, {v2} <br> {v3} <br> {v4} MWh/day'.format(
+                            v1=nodes_gdf.loc[n, 'city'], v2=nodes_gdf.loc[n, 'state'],
+                            v3=nodes_gdf.loc[n, 'nodeid'],
+                            v4=round(nodes_gdf.loc[n, 'avg'][t_step]['daily_supply_mwh']))
+                    else:
+                        name = '{v1}, {v2} <br> {v3} <br> {v4} kgH<sub>2</sub>/day'.format(
+                            v1=nodes_gdf.loc[n, 'city'], v2=nodes_gdf.loc[n, 'state'],
+                            v3=nodes_gdf.loc[n, 'nodeid'],
+                            v4=round(nodes_gdf.loc[n, 'avg'][t_step]['daily_supply_kgh2']))
                 else:
                     name = '{v1}, {v2} <br> {v3}'.format(v1=nodes_gdf.loc[n, 'city'],
                                                          v2=nodes_gdf.loc[n, 'state'],
@@ -357,7 +373,6 @@ def plot_facility_nodes(nodes_gdf, time_idx, time_horizon, color=None, increment
 
 def plot_covered_nodes(nodes_gdf, time_idx, time_horizon, color=None, incremental=False):
     legend_name = 'Covered Node'
-    lg_group = 1
 
     lats = []
     lons = []
@@ -469,14 +484,15 @@ def plot_facility_location_summary_table(G: nx.DiGraph, time_step, max_flow=Fals
             cells=dict(values=[
                 ['Time Step',
                  'Cumulative Budget',
-                 'Max Flow Capture',
+                 'Max Flow Capture %',
                  'Emissions Reduction' if 'operations' in G.graph.keys() else '--',
-                 'Levelized Cost<br>of Emissions',
+                 'Levelized Cost<br>of Operations',
                  'Cost of Avoided<br>Emissions',
                  ],
                 ['{v0}'.format(v0=time_step),
                  '{v0}'.format(v0=G.graph['framework']['cum_budgets'][time_step]),
-                 '{v0}%'.format(v0=round(100 * G.graph['framework']['tm_capt_perc'][time_step], 2)),
+                 # '{v0}%'.format(v0=round(100 * G.graph['framework']['tm_capt_perc'][time_step], 2)),
+                 '{v0}%'.format(v0=round(100 * G.graph['operations']['deployment_perc'][time_step]['TOTAL'], 2)),
                  '{v0}%'.format(v0=round(G.graph['operations']['emissions_change'][time_step]['TOTAL'],
                                          2) if 'operations' in G.graph.keys() else '--'),
                  '¢{v0}/ton-mi'.format(v0=round(
@@ -492,49 +508,6 @@ def plot_facility_location_summary_table(G: nx.DiGraph, time_step, max_flow=Fals
             )
         )
     else:
-        # g = go.Table(
-        #     header=dict(values=['Variable', 'Value'],
-        #                 font=dict(size=14),
-        #                 line_color=black,
-        #                 fill_color=mid_purple,
-        #                 ),
-        #     cells=dict(values=[
-        #         ['Time Step',
-        #          'Railroad',
-        #          'Range (km)',
-        #          'Number of Facilities',
-        #          'Flow Threshold %',
-        #          'Flow Threshold',
-        #          'Flow Capture %',
-        #          'Flow Capture',
-        #          'Max Flow Available',
-        #          'Discount Factor',
-        #          'Number of Covered Nodes',
-        #          'Number of Covered Edges'
-        #          ],
-        #         ['{v0}'.format(v0=time_step),
-        #          '{v0}'.format(v0=G.graph['scenario']['railroad']),
-        #          '{v0}'.format(v0=G.graph['scenario']['range_km']),
-        #          '{v0}'.format(v0=len(G.graph['framework']['selected_facilities'][time_step])),
-        #          '{v0}'.format(v0=round(100 * G.graph['framework']['flow_mins'][time_step] /
-        #                                 G.graph['framework']['tm_available'][time_step], 2)),
-        #          '{v0}'.format(v0=round(G.graph['framework']['flow_mins'][time_step])),
-        #          '{v0}%'.format(v0=round(100 * G.graph['framework']['tm_capt_perc'][time_step], 2)),
-        #          '{v0} ton-miles'.format(v0=round(G.graph['framework']['tm_capt'][time_step])),
-        #          '{v0} ton-miles'.format(v0=round(G.graph['framework']['tm_available'][time_step])),
-        #          '{v0}'.format(v0=round(G.graph['framework']['discount_rates'][time_step], 4)),
-        #          '{v0}'.format(v0=(len(set(n for p in G.graph['framework']['covered_path_nodes'][time_step].values()
-        #                                    for n in p)))),
-        #          '{v0}'.format(v0=len(set((u, v) for p in G.graph['framework']['covered_path_edges'][time_step].values()
-        #                                   for u, v in p).union(
-        #              set((v, u) for p in G.graph['framework']['covered_path_edges'][time_step].values() for u, v in p))))
-        #         ]
-        #     ],
-        #             font=dict(size=12),
-        #             line_color=black,
-        #             fill_color=light_purple,
-        #         )
-        #     )
         g = go.Table(
             header=dict(values=['Variable', 'Value'],
                         font=dict(size=14),
@@ -547,16 +520,21 @@ def plot_facility_location_summary_table(G: nx.DiGraph, time_step, max_flow=Fals
                  'Flow Threshold %',
                  'Flow Capture %',
                  'Emissions Reduction %',
-                 'Levelized Cost of <br> Emissions (¢/ton-mi)',
+                 'Levelized Cost<br>of Operations',
+                 'Cost of Avoided<br>Emissions',
                  ],
                 ['{v0}'.format(v0=time_step),
                  '{v0}'.format(v0=len(G.graph['framework']['selected_facilities'][time_step])),
                  '{v0}'.format(v0=round(100 * G.graph['framework']['flow_mins'][time_step] /
                                         G.graph['framework']['tm_available'][time_step], 2)),
-                 '{v0}%'.format(v0=round(100 * G.graph['framework']['tm_capt_perc'][time_step], 2)),
+                 # '{v0}%'.format(v0=round(100 * G.graph['framework']['tm_capt_perc'][time_step], 2)),
+                 '{v0}%'.format(v0=round(100 * G.graph['operations']['deployment_perc'][time_step]['TOTAL'], 2)),
                  '{v0}%'.format(v0=round(G.graph['operations']['emissions_change'][time_step]['TOTAL'], 2)),
-                 '{v0}%'.format(v0=round(
+                 '¢{v0}/ton-mi'.format(v0=round(
                      100 * G.graph['energy_source_TEA'][time_step]['total_scenario_LCO_tonmi']['TOTAL'], 2)),
+                 '${v0}/ton CO<sub>2</sub>'.format(v0=round(
+                     1e3 * G.graph['operations']['cost_avoided_emissions'][time_step]['TOTAL'])
+                 if 'operations' in G.graph.keys() else '--'),
                  ]
             ],
                 font=dict(size=12),

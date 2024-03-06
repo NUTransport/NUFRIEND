@@ -14,8 +14,6 @@ BATTERY
 '''
 
 
-# TODO: check these items here for passing all activated inputs,
-#  consider allowing clean_energy and clean_energy_cost in TEA
 def lca_battery_mp(G: nx.DiGraph, time_horizon: list, clean_energy=False):
     for n in G:
         G.nodes[n]['energy_source_LCA'] = {t: dict() for t in time_horizon}
@@ -49,7 +47,6 @@ def lca_battery_step_mp(G: nx.DiGraph, time_step: str, clean_energy=False):
 
     # load dataframe for emissions factors: index is state, column is year, value is in [g CO2/kWh]
     df_e = load_lca_battery_lookup_mp(year=time_step).div(1e6)  # in [ton CO2/kWh]
-
     for n in G:
         if clean_energy:
             e_factor = 0
@@ -111,7 +108,19 @@ HYDROGEN
 '''
 
 
-def lca_hydrogen(G: nx.DiGraph, h2_fuel_type: str = 'Natural Gas'):
+def lca_hydrogen_mp(G: nx.DiGraph, time_horizon: list, h2_fuel_type: str = None, clean_energy=False):
+    for n in G:
+        G.nodes[n]['energy_source_LCA'] = {t: dict() for t in time_horizon}
+
+    G.graph['energy_source_LCA'] = {t: dict() for t in time_horizon}
+
+    for t in time_horizon:
+        G = lca_hydrogen_step_mp(G=G, time_step=t, h2_fuel_type=h2_fuel_type, clean_energy=clean_energy)
+
+    return G
+
+
+def lca_hydrogen_step_mp(G: nx.DiGraph, time_step: str, h2_fuel_type: str = 'Natural Gas', clean_energy=False):
     """
     Conducts emissions life-cycle analysis for all refueling facilities in G based on their size, and consumption.
 
@@ -133,34 +142,35 @@ def lca_hydrogen(G: nx.DiGraph, h2_fuel_type: str = 'Natural Gas'):
 
     """
     # return G with node attribute with emissions info for hydrogen
-    year = '2034'
-    e_factor = load_lca_hydrogen_lookup().loc[h2_fuel_type, year] / 1e6  # tonCO2/kgh2
+    if clean_energy:
+        e_factor = 0
+    else:
+        e_factor = load_lca_hydrogen_lookup().loc[h2_fuel_type, '2034'] / 1e6  # tonCO2/kgh2
     G.graph['scenario']['h2_fuel_type'] = h2_fuel_type
 
     for n in G:
         # e_factor = df_e.loc[G.nodes[n]['state'], 'emissions']
-        G.nodes[n]['energy_source_LCA'] = {'emissions_tonco2_kgh2': e_factor,
-                                           'daily_emissions_tonco2':
-                                               (e_factor * G.nodes[n]['avg']['daily_supply_kgh2']),
-                                           'annual_total_emissions_tonco2':
-                                               (365 * e_factor * G.nodes[n]['avg']['daily_supply_kgh2'])}
+        G.nodes[n]['energy_source_LCA'][time_step] = {
+            'emissions_tonco2_kgh2': e_factor,
+            'daily_emissions_tonco2': (e_factor * G.nodes[n]['avg'][time_step]['daily_supply_kgh2']),
+            'annual_total_emissions_tonco2': (365 * e_factor * G.nodes[n]['avg'][time_step]['daily_supply_kgh2'])}
 
-    comm_list = list({c for u, v in G.edges for c in G.edges[u, v]['hydrogen_avg_kgh2'].keys()})
+    comm_list = list({c for u, v in G.edges for c in G.edges[u, v]['hydrogen_avg_kgh2'][time_step].keys()})
 
     df_dropin = load_lca_dropin_lookup()
     diesel_factor = df_dropin.loc['diesel', 'gCO2/gal'] / 1e6  # in [ton-CO2/gal]
-    annual_hydrogen_total_emissions = {c: sum(e_factor * G.edges[u, v]['hydrogen_avg_kgh2'][c] * 365
+    annual_hydrogen_total_emissions = {c: sum(e_factor * G.edges[u, v]['hydrogen_avg_kgh2'][time_step][c] * 365
                                               for u, v in G.edges) for c in comm_list}
-    tonmi_deflation_factor = {c: 1 - G.graph['operations']['perc_tonmi_inc'][c] / 100 for c in comm_list}
-    hydrogen_annual_tonmi = {c: sum([G.edges[u, v]['hydrogen_avg_ton'][c] * G.edges[u, v]['miles'] * 365
-                                     for u, v in G.edges]) * tonmi_deflation_factor[c] for c in comm_list}
-    support_diesel_annual_tonmi = {c: sum([G.edges[u, v]['support_diesel_avg_ton'][c] * G.edges[u, v]['miles'] * 365
-                                           for u, v in G.edges]) * tonmi_deflation_factor[c] for c in comm_list}
+    hydrogen_annual_tonmi = {c: sum([G.edges[u, v]['hydrogen_avg_ton'][time_step][c] * G.edges[u, v]['miles'] * 365
+                                     for u, v in G.edges]) for c in comm_list}
+    support_diesel_annual_tonmi = {c: sum([G.edges[u, v]['support_diesel_avg_ton'][time_step][c] *
+                                           G.edges[u, v]['miles'] * 365 for u, v in G.edges]) for c in comm_list}
     baseline_annual_tonmi = {c: hydrogen_annual_tonmi[c] + support_diesel_annual_tonmi[c] for c in comm_list}
-    annual_support_diesel_total_emissions = {c: sum([diesel_factor * G.edges[u, v]['support_diesel_avg_gal'][c] * 365
+    annual_support_diesel_total_emissions = {c: sum([diesel_factor *
+                                                     G.edges[u, v]['support_diesel_avg_gal'][time_step][c] * 365
                                                      for u, v in G.edges]) for c in comm_list}
 
-    G.graph['energy_source_LCA'] = dict(
+    G.graph['energy_source_LCA'][time_step] = dict(
         annual_hydrogen_total_emissions=annual_hydrogen_total_emissions,
         annual_support_diesel_total_emissions=annual_support_diesel_total_emissions,
         hydrogen_emissions_tonco2_kgh2={c: e_factor for c in comm_list},
@@ -204,7 +214,6 @@ def load_lca_dropin_lookup():
 
 def lca_dropin_mp(G: nx.DiGraph, time_horizon: list, fuel_type: str, deployment_perc: float,
                   scenario_fuel_type: str = None):
-
     for e in G.edges:
         G.edges[e][fuel_type + '_LCA'] = {t: dict() for t in time_horizon}
 
@@ -327,7 +336,6 @@ def lca_dropin_step_mp(G: nx.DiGraph, time_step: str, fuel_type: str, deployment
 
 
 def lca_diesel_mp(G: nx.DiGraph, time_horizon: list):
-
     for e in G.edges:
         G.edges[e]['diesel_LCA'] = {t: dict() for t in time_horizon}
 

@@ -893,7 +893,8 @@ def tea_hydrogen(peak_loc: float, avg_loc: float, avg_kgh2: float, max_util: flo
 
 
 def tea_hydrogen_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_type: str = 'Cryo-pump',
-                                clean_energy_cost: float = None, diesel_cost_p_gal: float = None):
+                                clean_energy_cost: float = None, tender_cost_p_tonmi: float = None,
+                                diesel_cost_p_gal: float = None):
     # lookup dataframes for constants
     rr_v = load_railroad_values().loc[G.graph['scenario']['railroad']]
     # calculate average # batteries per locomotive based on range and effective battery energy capacity
@@ -986,9 +987,10 @@ def tea_hydrogen_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_t
     avg_hydrogen_energy_kgh2 = {c: sum(G.edges[u, v]['hydrogen_avg_kgh2'][c] for u, v in G.edges) for c in comm_list}
     peak_hydrogen_energy_kgh2 = {c: sum(G.edges[u, v]['hydrogen_peak_kgh2'][c] for u, v in G.edges) for c in comm_list}
 
-    tender_LCO_tonmi = rr_v[station_type + ' tender $/ton-mile']
+    if tender_cost_p_tonmi is None:
+        tender_cost_p_tonmi = rr_v[station_type + ' tender $/ton-mile']
     # convert to battery $/kWh
-    tender_LCO_kgh2 = {c: tender_LCO_tonmi * hydrogen_tonmi[c] / avg_hydrogen_energy_kgh2[c]
+    tender_LCO_kgh2 = {c: tender_cost_p_tonmi * hydrogen_tonmi[c] / avg_hydrogen_energy_kgh2[c]
     if avg_hydrogen_energy_kgh2[c] > 0 else 0 for c in comm_list}
 
     if diesel_cost_p_gal is None:
@@ -1075,7 +1077,7 @@ def tea_hydrogen_all_facilities(G: nx.DiGraph, max_util: float = 0.88, station_t
             comm_list,
             [G.graph['energy_source_TEA']['fuel_LCO_kgh2'][c] * avg_hydrogen_energy_kgh2[c] / hydrogen_tonmi[c]
              for c in comm_list])),
-        tender_LCO_tonmi={c: tender_LCO_tonmi for c in comm_list},
+        tender_LCO_tonmi={c: tender_cost_p_tonmi for c in comm_list},
         delay_LCO_tonmi=dict(zip(
             comm_list,
             [G.graph['energy_source_TEA']['delay_LCO_kgh2'][c] * avg_hydrogen_energy_kgh2[c] / hydrogen_tonmi[c]

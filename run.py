@@ -100,7 +100,9 @@ def run_scenario_file(scenario_code: str, G: nx.DiGraph = None, plot=True, load_
             actual_dep_perc = G.graph['operations']['deployment_perc'][comm_group]
             G.graph['scenario']['actual_deployment_perc'] = actual_dep_perc
             # 5.1. TEA
-            G = tea_battery_all_facilities(G, max_util=max_util)
+            G = tea_battery_all_facilities(G, max_util=max_util,
+                                           clean_energy_cost=clean_energy_cost if clean_energy else None,
+                                           tender_cost_p_tonmi=tender_cost_p_tonmi, diesel_cost_p_gal=diesel_cost_p_gal)
             # baseline and other dropin fuels (easy factor calculation)
             G = tea_dropin(G=G, fuel_type='diesel', deployment_perc=1, scenario_fuel_type=fuel_type)
             # G = tea_dropin(G, fuel_type='biodiesel', deployment_perc=actual_dep_perc, scenario_fuel_type=fuel_type)
@@ -158,7 +160,10 @@ def run_scenario_file(scenario_code: str, G: nx.DiGraph = None, plot=True, load_
             actual_dep_perc = G.graph['operations']['deployment_perc'][comm_group]
             G.graph['scenario']['actual_deployment_perc'] = actual_dep_perc
             # 5.1. TEA
-            G = tea_hydrogen_all_facilities(G, max_util=max_util, station_type=station_type)
+            G = tea_hydrogen_all_facilities(G, max_util=max_util, station_type=station_type,
+                                            clean_energy_cost=clean_energy_cost if clean_energy else None,
+                                            tender_cost_p_tonmi=tender_cost_p_tonmi,
+                                            diesel_cost_p_gal=diesel_cost_p_gal)
             # baseline and other dropin fuels (easy factor calculation)
             G = tea_dropin(G, fuel_type='diesel', deployment_perc=1, scenario_fuel_type=fuel_type)
             G = tea_dropin(G, fuel_type='biodiesel', deployment_perc=actual_dep_perc, scenario_fuel_type=fuel_type)
@@ -167,7 +172,7 @@ def run_scenario_file(scenario_code: str, G: nx.DiGraph = None, plot=True, load_
 
             t0 = time.time()
             # 5.2. LCA
-            G = lca_hydrogen(G)
+            G = lca_hydrogen(G, h2_fuel_type=h2_fuel_type)
             # baseline and other dropin fuels (easy factor calculation)
             G = lca_dropin(G, fuel_type='diesel', deployment_perc=1, scenario_fuel_type=fuel_type)
             G = lca_dropin(G, fuel_type='biodiesel', deployment_perc=actual_dep_perc, scenario_fuel_type=fuel_type)
@@ -227,7 +232,9 @@ def run_scenario_file(scenario_code: str, G: nx.DiGraph = None, plot=True, load_
             actual_dep_perc = G.graph['operations']['deployment_perc'][comm_group]
             G.graph['scenario']['actual_deployment_perc'] = actual_dep_perc
             # 5.1. TEA
-            G = tea_hybrid(G, max_util=max_util, station_type=station_type)
+            G = tea_hybrid(G, max_util=max_util, station_type=station_type,
+                           clean_energy_cost=clean_energy_cost if clean_energy else None,
+                           tender_cost_p_tonmi=tender_cost_p_tonmi, diesel_cost_p_gal=diesel_cost_p_gal)
             # baseline and other dropin fuels (easy factor calculation)
             G = tea_dropin(G, fuel_type='diesel', deployment_perc=1, scenario_fuel_type=fuel_type)
             # G = tea_dropin(G, fuel_type='biodiesel', deployment_perc=actual_dep_perc, scenario_fuel_type=fuel_type)
@@ -272,10 +279,10 @@ def run_scenario_file(scenario_code: str, G: nx.DiGraph = None, plot=True, load_
 
         G = operations_stats(G)
 
-        G = update_graph_values(G=G, fuel_type=fuel_type, max_util=max_util, station_type=station_type,
-                                clean_energy=clean_energy, clean_energy_cost=clean_energy_cost,
-                                h2_fuel_type=h2_fuel_type, tender_cost_p_tonmi=tender_cost_p_tonmi,
-                                diesel_cost_p_gal=diesel_cost_p_gal)
+        # G = update_graph_values(G=G, fuel_type=fuel_type, max_util=max_util, station_type=station_type,
+        #                         clean_energy=clean_energy, clean_energy_cost=clean_energy_cost,
+        #                         h2_fuel_type=h2_fuel_type, tender_cost_p_tonmi=tender_cost_p_tonmi,
+        #                         diesel_cost_p_gal=diesel_cost_p_gal)
         print('SCENARIO RUN:: %s seconds ---' % round(time.time() - t0_total, 3))
 
         if cache_scenario:

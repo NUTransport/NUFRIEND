@@ -53,10 +53,6 @@ pio.renderers.default = "browser"
 tqdm.pandas()
 
 # TODO: for publicly released version:
-#  - have local directories for key input data; store template files in these as well as sample data files for example
-#  - create example/test files and sample results so that users can run and compare on their computer
-#       - allow scenario code to be a name that is provided by user, otherwise, generate;
-#         name all relevant input/output files with the provided/generated name
 #  - module documentation; deocumentation (at top) for key methods
 #  - remove large, old commented out code blocks
 
@@ -70,6 +66,7 @@ COMM_DIR = os.path.join(INPUT_DIR, 'commodity')
 GEN_DIR = os.path.join(INPUT_DIR, 'general')
 LCA_DIR = os.path.join(INPUT_DIR, 'LCA')
 NX_DIR = os.path.join(INPUT_DIR, 'networks')
+MAT_DIR = os.path.join(INPUT_DIR, 'matrices')
 TEA_DIR = os.path.join(INPUT_DIR, 'TEA')
 RR_DIR = os.path.join(INPUT_DIR, 'railroad')
 SCENARIO_DIR = os.path.join(INPUT_DIR, 'scenario')
@@ -84,6 +81,4 @@ EDGE_O_DIR = os.path.join(OUTPUT_DIR, 'edges')
 
 
 # GLOBAL VARS
-# filename shortcuts
-FILES = {2017: 'WB2017_900_Unmasked.csv', 2018: 'WB2018_900_Unmasked.csv', 2019: 'WB2019_913_Unmasked.csv'}
 KM2MI = 0.62137119  # miles / km

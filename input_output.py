@@ -31,7 +31,7 @@ def load_scenario_mp_df(scenario_code: str):
     for int_val in int_vals:
         df_scenario.loc[int_val, 'Value0'] = int(df_scenario.loc[int_val, 'Value0'])
     float_vals = ['range_km', 'max_util', 'clean_energy_cost', 'eff_energy_p_tender',
-                  'tender_cost_p_tonmi', 'diesel_cost_p_gal']
+                  'tender_cost_p_tonmi', 'diesel_cost_p_gal', 'opt_tol']
     for float_val in float_vals:
         df_scenario.loc[float_val, 'Value0'] = float(df_scenario.loc[float_val, 'Value0'])
 
@@ -178,12 +178,11 @@ def extract_assert_scenario_inputs(scenario_code: str):
 
 
 def extract_assert_scenario_mp_inputs(scenario_code: str):
-
     idxs = ['rr', 'fuel_type', 'range_km', 'max_flow',
             'time_horizon', 'deployment_percs', 'budgets', 'discount_rates', 'facility_info_filename',
             'max_util', 'station_type', 'h2_fuel_type', 'clean_energy', 'clean_energy_cost', 'emissions_obj',
             'eff_energy_p_tender', 'tender_cost_p_tonmi', 'diesel_cost_p_gal', 'flow_data_filename',
-            'suppress_output', 'scenario_code']
+            'suppress_output', 'opt_tol', 'scenario_code']
 
     df_scenario = load_scenario_mp_df(scenario_code=scenario_code)
 
@@ -196,15 +195,15 @@ def extract_assert_scenario_mp_inputs(scenario_code: str):
      _, _, _, _, facility_info_filename,
      max_util, station_type, h2_fuel_type, clean_energy, clean_energy_cost, emissions_obj,
      eff_energy_p_tender, tender_cost_p_tonmi, diesel_cost_p_gal, flow_data_filename,
-     suppress_output, scenario_code] = df_scenario.reindex(idxs)['Value0']
+     suppress_output, opt_tol, scenario_code] = df_scenario.reindex(idxs)['Value0']
 
     # verify validity of inputs
     # rr: railroad selection
     assert rr in {'BNSF', 'UP', 'NS', 'CSXT', 'KCS', 'CN', 'CP', 'USA1', 'WCAN', 'EAST'}, \
         'Provide a railroad selection <rr>.'
     # fuel_type
-    assert fuel_type in {'battery'}, 'Provide an energy source selection <fuel_type>. ' \
-                                     'Only <battery> currently supported.'
+    assert fuel_type in {'battery', 'hydrogen'}, 'Provide an energy source selection <fuel_type>. ' \
+                                                 'Only <battery> or <hydrogen> supported.'
     # range_km
     assert isinstance(range_km, str) or isinstance(range_km, float) or isinstance(range_km, int), \
         'Provide a valid input for energy source <range_km>.'
@@ -267,9 +266,8 @@ def extract_assert_scenario_mp_inputs(scenario_code: str):
     # facility_info_filename
     assert isinstance(facility_info_filename, str) or np.isnan(facility_info_filename),\
         'Provide a valid input for <facility_file_name>.'
-    facility_info_path = os.path.join(FACILITY_DIR, facility_info_filename)
-    assert os.path.exists(facility_info_path), \
-        'Path {p} provided for <facility_file_name> does not exist.'.format(p=facility_info_path)
+    if not isinstance(facility_info_filename, str):
+        facility_info_filename = None
     facility_costs, fixed_facilities, barred_facilities = load_facility_info(facility_info_filename=
                                                                              facility_info_filename, rr=rr,
                                                                              time_horizon=time_horizon)
@@ -316,8 +314,7 @@ def extract_assert_scenario_mp_inputs(scenario_code: str):
     if np.isnan(tender_cost_p_tonmi):
         tender_cost_p_tonmi = None
     # diesel_cost_p_gal
-    assert diesel_cost_p_gal is None or (isinstance(diesel_cost_p_gal, float) or isinstance(diesel_cost_p_gal, int)
-                                         and diesel_cost_p_gal >= 0), \
+    assert (isinstance(diesel_cost_p_gal, float) or isinstance(diesel_cost_p_gal, int) and diesel_cost_p_gal >= 0), \
         'Provide a valid input for <diesel_cost_p_gal> diesel fuel cost per gallon.'
     if np.isnan(diesel_cost_p_gal):
         diesel_cost_p_gal = None
@@ -327,6 +324,11 @@ def extract_assert_scenario_mp_inputs(scenario_code: str):
     assert isinstance(suppress_output, bool) or suppress_output in {0, 1}, \
         'Provide a valid input for <suppress_output> optimization solver log parameter.'
     suppress_output = bool(suppress_output)
+    # opt_tol
+    assert np.isnan(opt_tol) or isinstance(opt_tol, float) or isinstance(opt_tol, int), \
+        'Provide a valid input for <opt_tol>.'
+    if np.isnan(opt_tol) or opt_tol <= 0:
+        opt_tol = None
     # scenario_code
     assert isinstance(scenario_code, str), \
         'Provide a valid input for the <scenario_code> input and output file naming code.'
@@ -338,34 +340,34 @@ def extract_assert_scenario_mp_inputs(scenario_code: str):
             facility_costs, fixed_facilities, barred_facilities,
             max_util, station_type, h2_fuel_type, clean_energy, clean_energy_cost, emissions_obj,
             eff_energy_p_tender, tender_cost_p_tonmi, diesel_cost_p_gal, flow_data_filename,
-            suppress_output, scenario_code]
+            suppress_output, opt_tol, scenario_code]
 
 
 def load_facility_info(facility_info_filename: str, rr: str, time_horizon):
 
-    df = pd.read_csv(os.path.join(FACILITY_DIR, facility_info_filename), header=0, index_col='nodeid')
-    assert (len(df.columns) - 1) / 3 == len(time_horizon), \
-        'Provide the correct number of time-dependent columns in <facility_info_filename>.'
-
     G = load_simplified_consolidated_graph(rr=rr)
-    node_list = G.nodes
+    node_list = list(G.nodes)
     facility_costs = {(n, t): 1 for t in time_horizon for n in node_list}
     fixed_facilities = {t: [] for t in time_horizon}
     barred_facilities = {t: [] for t in time_horizon}
 
-    for ti, t in enumerate(time_horizon):
-        tidx = str(ti)
-        for n in df.index:
-            if n not in node_list:
-                continue
+    if facility_info_filename and os.path.exists(os.path.join(FACILITY_DIR, facility_info_filename)):
+        df = pd.read_csv(os.path.join(FACILITY_DIR, facility_info_filename), header=0, index_col='nodeid')
+        assert len(df.columns) / 3 == len(time_horizon), \
+            'Provide the correct number of time-dependent columns in <facility_info_filename>.'
 
-            facility_costs[(n, t)] = float(df.loc[n, 'cost' + tidx])
-            if int(df.loc[n, 'fixed' + tidx]) == 1:
-                fixed_facilities[t].append(n)
-            if int(df.loc[n, 'barred' + tidx]) == 1:
-                barred_facilities[t].append(n)
-            assert not (int(df.loc[n, 'fixed' + tidx]) == 1 and int(df.loc[n, 'fixed' + tidx]) == 1), \
-                'A single facility {n} cannot be both fixed and barred at the same time step {t}.'.format(n=n, t=ti)
+        for ti, t in enumerate(time_horizon):
+            tidx = str(ti)
+            for n in df.index:
+                if n not in node_list:
+                    continue
+                facility_costs[(n, t)] = float(df.loc[n, 'cost' + tidx])
+                if int(df.loc[n, 'fixed' + tidx]) == 1:
+                    fixed_facilities[t].append(n)
+                if int(df.loc[n, 'barred' + tidx]) == 1:
+                    barred_facilities[t].append(n)
+                assert not (int(df.loc[n, 'fixed' + tidx]) == 1 and int(df.loc[n, 'barred' + tidx]) == 1), \
+                    'A single facility {n} cannot be both fixed and barred at the same time step {t}.'.format(n=n, t=ti)
 
     return facility_costs, fixed_facilities, barred_facilities
 
