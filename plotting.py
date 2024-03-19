@@ -28,26 +28,22 @@ MASTER PLOT
 
 
 def plot_scenario(G: nx.DiGraph, fuel_type: str, deployment_perc: float, comm_group: str = None,
-                  codified_name: str = None, fig=None, figshow=True, cache_fig=True, additional_plots=True,
-                  figlist=True, legend_show=True):
+                  fig=None, additional_plots=True, figlist=True, legend_show=True):
     if fuel_type == 'battery':
-        fig, label = battery_plot(G, comm_group=comm_group, additional_plots=additional_plots, figlist=figlist,
-                                  fig=fig, legend_show=legend_show)
+        fig = battery_plot(G, comm_group=comm_group, additional_plots=additional_plots, figlist=figlist,
+                           fig=fig, legend_show=legend_show)
     elif fuel_type == 'hydrogen':
-        fig, label = hydrogen_plot(G, comm_group=comm_group, additional_plots=additional_plots, figlist=figlist,
-                                   fig=fig, legend_show=legend_show)
+        fig = hydrogen_plot(G, comm_group=comm_group, additional_plots=additional_plots, figlist=figlist,
+                            fig=fig, legend_show=legend_show)
     elif 'hybrid' in fuel_type:
-        fig, label = hybrid_plot(G, comm_group=comm_group, additional_plots=additional_plots, figlist=figlist,
-                                 fig=fig, legend_show=legend_show)
+        fig = hybrid_plot(G, comm_group=comm_group, additional_plots=additional_plots, figlist=figlist,
+                          fig=fig, legend_show=legend_show)
     elif fuel_type == 'diesel' or fuel_type == 'biodiesel' or fuel_type == 'e-fuel':
-        fig, label = dropin_plot(G, fuel_type=fuel_type, deployment_perc=deployment_perc, comm_group=comm_group,
-                                 additional_plots=additional_plots, figlist=figlist, fig=fig, figshow=figshow,
-                                 legend_show=legend_show)
+        fig = dropin_plot(G, fuel_type=fuel_type, deployment_perc=deployment_perc, comm_group=comm_group,
+                          additional_plots=additional_plots, figlist=figlist, fig=fig,
+                          legend_show=legend_show)
 
-    # if cache_fig:
-    #     cache_plot(fig, codified_name)
-
-    return fig, label
+    return fig
 
 
 '''
@@ -588,115 +584,12 @@ def battery_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist
 
     print('\t EDGES:: ' + str(time.time() - t0))
 
-    # # edges_gdf['lons'] = edges_gdf['geometry'].apply(lambda c: list(c.xy[0]))
-    # # edges_gdf['lats'] = edges_gdf['geometry'].apply(lambda c: list(c.xy[1]))
-    #
-    # # edge_set_undirected = {(u, v) for u, v in edges_gdf.index}.union({(v, u) for u, v in edges_gdf.index})
-    # # edges_gdf.fillna(0, inplace=True)
-    # # for u, v in edge_set_undirected:
-    # #     tot_tons = edges_gdf.loc[(u, v), 'battery_avg_ton'][comm_group] + \
-    # #                edges_gdf.loc[(v, u), 'battery_avg_ton'][comm_group]
-    # #     edges_gdf.loc[(u, v), 'total_tons'] = tot_tons
-    # #     edges_gdf.loc[(v, u), 'total_tons'] = tot_tons
-    # # edges_gdf.sort_values(by=['total_tons'], inplace=True)
-    #
-    # legend_name = 'Battery Network'
-    # legend_bool = True
-    # lg_group = 1
-    # edge_set = set()
-    #
-    # t0 = time.time()
-    # for u, v in edges_gdf.index:
-    #     # for u, v in [e for p in G.graph['framework']['path_edges'] for e in p]:
-    #     # plot baseline (all edges) first
-    #     if edges_gdf.loc[(u, v), 'covered'] == 1 and (u, v) not in edge_set:
-    #         edge_set.update({(u, v), (v, u)})
-    #
-    #         e = edges_gdf.loc[(u, v)]
-    #         e_rev = edges_gdf.loc[(v, u)]
-    #         e_tot_batt_avg_ton = round(e['battery_avg_ton'][comm_group] + e_rev['battery_avg_ton'][comm_group])
-    #         e_tot_batt_avg_loc = round(e['battery_avg_loc'][comm_group] + e_rev['battery_avg_loc'][comm_group])
-    #         e_tot_all_avg_ton = (e['battery_avg_ton'][comm_group] + e['support_diesel_avg_ton'][comm_group] +
-    #                              e_rev['battery_avg_ton'][comm_group] + e['support_diesel_avg_ton'][comm_group])
-    #         if np.floor(e_tot_all_avg_ton) == 0:
-    #             e_weight_battery_perc_ton = 0
-    #         else:
-    #             e_weight_battery_perc_ton = round(100 * e_tot_batt_avg_ton / e_tot_all_avg_ton, 2)
-    #
-    #         text = str(round(e['miles'])) + ' miles' + '<br>' + \
-    #                str(e_tot_batt_avg_ton) + ' ' + comm_group.capitalize() + ' tons/day' + '<br>' + \
-    #                str(e_tot_batt_avg_loc) + ' ' + comm_group.capitalize() + ' loc/day' + '<br>' + \
-    #                'Share of ' + comm_group.lower() + ' tons moved by battery: ' + \
-    #                str(e_weight_battery_perc_ton) + '%'
-    #
-    #         fig.add_trace(
-    #             go.Scattergeo(
-    #                 uid=str(u) + '_' + str(v),
-    #                 locationmode='USA-states',
-    #                 lon=list(e['geometry'].xy[0]),
-    #                 lat=list(e['geometry'].xy[1]),
-    #                 hovertemplate=text,
-    #                 mode='lines',
-    #                 line=dict(
-    #                     width=line_size(e_tot_all_avg_ton),
-    #                     # width=2,
-    #                     color=green4,
-    #                     # color=red,
-    #                 ),
-    #                 opacity=1,
-    #                 legendgroup=lg_group,
-    #                 name=legend_name,
-    #                 # name='Selected O-D Paths',
-    #                 showlegend=legend_bool,
-    #             ),
-    #             # row=row, col=col
-    #         )
-    #         legend_bool = False
-    #
-    #         # fig.update_traces(
-    #         #     hovertemplate=text,
-    #         #     line=dict(
-    #         #         width=line_size(e_tot_all_avg_ton),
-    #         #         color=green4,
-    #         #     ),
-    #         #     opacity=1,
-    #         #     legendgroup=lg_group,
-    #         #     name=legend_name,
-    #         #     showlegend=legend_bool,
-    #         #     selector=dict(uid=str(v) + '_' + str(u)),
-    #         #     overwrite=True
-    #         # )
-    # print('\t EDGES:: ' + str(time.time() - t0))
-
     legend_bool = [True, True]
     # od_set = {u for u, _ in G.graph['framework']['ods']}.union({v for _, v in G.graph['framework']['ods']})
 
     t0 = time.time()
     for i in range(len(nodes_gdf)):
         n = nodes_gdf.loc[nodes_gdf.index[i]]
-        # if n['nodeid'] in od_set:
-        #     fig.add_trace(
-        #         go.Scattergeo(
-        #             uid=n['nodeid'],
-        #             locationmode='USA-states',
-        #             lon=[n['geometry'].x],
-        #             lat=[n['geometry'].y],
-        #             # hovertemplate=text,
-        #             marker=dict(
-        #                 # size=5 * np.log(peak_charged_mwh + 10),
-        #                 size=15,
-        #                 color=red,
-        #                 symbol='diamond',
-        #             ),
-        #             opacity=1,
-        #             legendgroup=lg_group,
-        #             name='O/D',
-        #             showlegend=legend_bool[0],
-        #         ),
-        #         # row=row, col=col
-        #     )
-        #     legend_bool[0] = False
-        # continue
 
         if n['facility'] == 1:
             if n['avg']['energy_transfer'] == 1:
@@ -754,15 +647,6 @@ def battery_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist
                        str(round(0, 2)) + '<br>' + \
                        'Total Daily Delay Cost: \t $' + \
                        str(round(0, 2)) + ' K<br>'
-            #  + str(round(1e-3 * (n['energy_source_TEA']['total_LCO'] -
-            #                   n['diesel_TEA']['total_LCO_tonmi']) /
-            #           (n['energy_source_LCA']['avg_emissions_tonco2_tonmi'] -
-            #            n['diesel_LCA']['total_emissions_tonco2_tonmi']), 3)) + \
-
-            # str(round(n['peak']['daily_supply_mwh'], 2)) + ' MWh/day' + '<br>' + \
-            # str(int(n['peak']['number_loc'])) + ' loc/day at peak' + '<br>' + \
-            # str(round(-n['peak']['daily_demand_mwh'], 2)) + ' MWh at peak demand' + '<br>' + \
-            # str(round(-n['avg']['daily_demand_mwh'], 2)) + ' MWh at avg demand'
 
             fig.add_trace(
                 go.Scattergeo(
@@ -788,190 +672,13 @@ def battery_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist
                 ),
                 # row=row, col=col
             )
-            # fig.update_traces(
-            #     hovertemplate=text,
-            #     marker=dict(
-            #         size=5 * np.log(peak_charged_mwh + 10),
-            #         # size=30,
-            #         color=green4,
-            #         sizemode='area',
-            #     ),
-            #     opacity=0.8,
-            #     legendgroup=lg_group,
-            #     name='Charging Facility',
-            #     showlegend=legend_bool[0],
-            #     selector=dict(uid=n['nodeid']),
-            #     overwrite=True
-            # )
 
             legend_bool[0] = False
-        # elif n['covered'] == 1:
-        #     text = n['city'] + ', ' + n['state']
-        #     lg_group = 1
-        #     fig.add_trace(
-        #         go.Scattergeo(
-        #             uid=n['nodeid'],
-        #             locationmode='USA-states',
-        #             lon=[n['geometry'].x],
-        #             lat=[n['geometry'].y],
-        #             hovertemplate=text,
-        #             marker=dict(size=6,
-        #                         color=green4,
-        #                         symbol='square'),
-        #             legendgroup=lg_group,
-        #             name='Covered (Non-Charging) Facility',
-        #             showlegend=legend_bool[1],
-        #         ),
-        #         # row=row, col=col
-        #     )
-        #     # fig.update_traces(
-        #     #     hovertemplate=text,
-        #     #     marker=dict(size=4,
-        #     #                 color=green4,
-        #     #                 symbol='square'),
-        #     #     legendgroup=lg_group,
-        #     #     name='Covered (Non-Charging) Facility',
-        #     #     showlegend=legend_bool[1],
-        #     #     selector=dict(uid=n['nodeid']),
-        #     #     overwrite=True
-        #     #     )
-        #     legend_bool[1] = False
     print('\t FACILITY NODES:: ' + str(time.time() - t0))
 
     t0 = time.time()
     for i in range(len(nodes_gdf)):
         n = nodes_gdf.loc[nodes_gdf.index[i]]
-        # if n['nodeid'] in od_set:
-        #     fig.add_trace(
-        #         go.Scattergeo(
-        #             uid=n['nodeid'],
-        #             locationmode='USA-states',
-        #             lon=[n['geometry'].x],
-        #             lat=[n['geometry'].y],
-        #             # hovertemplate=text,
-        #             marker=dict(
-        #                 # size=5 * np.log(peak_charged_mwh + 10),
-        #                 size=15,
-        #                 color=red,
-        #                 symbol='diamond',
-        #             ),
-        #             opacity=1,
-        #             legendgroup=lg_group,
-        #             name='O/D',
-        #             showlegend=legend_bool[0],
-        #         ),
-        #         # row=row, col=col
-        #     )
-        #     legend_bool[0] = False
-        # continue
-
-        # if n['facility'] == 1:
-        #     if n['avg']['energy_transfer'] == 1:
-        #         avg_charged_mwh = -n['avg']['daily_demand_mwh']
-        #         peak_charged_mwh = -n['peak']['daily_demand_mwh']
-        #     else:
-        #         avg_charged_mwh = n['avg']['daily_supply_mwh']
-        #         peak_charged_mwh = n['peak']['daily_supply_mwh']
-        #     if (n['energy_source_TEA']['avg_queue_time_p_loc'] is not None) and (
-        #             n['energy_source_TEA']['peak_queue_time_p_loc'] is not None):
-        #         text = n['city'] + ', ' + n['state'] + '<br>' + \
-        #                str(round(avg_charged_mwh, 2)) + ' MWh/day <br>' + \
-        #                str(int(n['avg']['number_loc'])) + ' loc/day <br>' + \
-        #                str(n['energy_source_TEA']['number_chargers']) + ' chargers <br>' + \
-        #                'Avg. Queue Time: ' + str(
-        #             round(n['energy_source_TEA']['avg_queue_time_p_loc'], 2)) + ' hrs <br>' + \
-        #                'Avg. Queue Length: ' + str(round(n['energy_source_TEA']['avg_queue_length'], 2)) + ' loc <br>' + \
-        #                'Peak Queue Time: ' + str(round(n['energy_source_TEA']['peak_queue_time_p_loc'], 2)) + \
-        #                ' hrs <br>' + \
-        #                'Peak Queue Length: ' + str(
-        #             round(n['energy_source_TEA']['peak_queue_length'], 2)) + ' loc <br>' + \
-        #                'Utilized ' + str(
-        #             round(n['energy_source_TEA']['actual_utilization'] * 24, 1)) + ' hrs/day <br>' + \
-        #                'Total LCO: ' + str(round(n['energy_source_TEA']['total_LCO'], 3)) + ' $/kWh <br>' + \
-        #                'WTW Emissions: ' + str(round(n['energy_source_LCA']['emissions_tonco2_kwh'] * 1e6, 3)) + \
-        #                ' g CO<sub>2</sub>' + '/kWh <br>' + \
-        #                'Capital Cost: \t $' + str(round(n['energy_source_TEA']['station_total'] / 1e6, 2)) + ' M <br>' + \
-        #                'Avg. Delay cost per car: \t $' + \
-        #                str(round(n['energy_source_TEA']['avg_daily_delay_cost_p_car'], 2)) + '<br>' + \
-        #                'Avg. Daily Delay cost per loc: \t $' + \
-        #                str(round(n['energy_source_TEA']['avg_daily_delay_cost_p_loc'], 2)) + '<br>' + \
-        #                'Total Daily Delay Cost: \t $' + \
-        #                str(round(n['energy_source_TEA']['total_daily_delay_cost'] / 1e3, 2)) + ' K<br>'
-        #     else:
-        #         text = n['city'] + ', ' + n['state'] + '<br>' + \
-        #                str(round(avg_charged_mwh, 2)) + ' MWh/day <br>' + \
-        #                str(int(n['avg']['number_loc'])) + ' loc/day <br>' + \
-        #                str(n['energy_source_TEA']['number_chargers']) + ' chargers <br>' + \
-        #                'Avg. Queue Time: ' + str(
-        #             round(0, 2)) + ' hrs <br>' + \
-        #                'Avg. Queue Length: ' + str(round(0, 2)) + ' loc <br>' + \
-        #                'Peak Queue Time: ' + str(round(0, 2)) + \
-        #                ' hrs <br>' + \
-        #                'Peak Queue Length: ' + str(
-        #             round(0, 2)) + ' loc <br>' + \
-        #                'Utilized ' + str(
-        #             round(n['energy_source_TEA']['actual_utilization'] * 24, 1)) + ' hrs/day <br>' + \
-        #                'Total LCO: ' + str(round(n['energy_source_TEA']['total_LCO'], 3)) + ' $/kWh <br>' + \
-        #                'WTW Emissions: ' + str(round(n['energy_source_LCA']['emissions_tonco2_kwh'] * 1e6, 3)) + \
-        #                ' g CO<sub>2</sub>' + '/kWh <br>' + \
-        #                'Capital Cost: \t $' + str(round(n['energy_source_TEA']['station_total'] / 1e6, 2)) + ' M <br>' + \
-        #                'Avg. Delay cost per car: \t $' + \
-        #                str(round(0, 2)) + '<br>' + \
-        #                'Avg. Daily Delay cost per loc: \t $' + \
-        #                str(round(0, 2)) + '<br>' + \
-        #                'Total Daily Delay Cost: \t $' + \
-        #                str(round(0, 2)) + ' K<br>'
-        #     #  + str(round(1e-3 * (n['energy_source_TEA']['total_LCO'] -
-        #     #                   n['diesel_TEA']['total_LCO_tonmi']) /
-        #     #           (n['energy_source_LCA']['avg_emissions_tonco2_tonmi'] -
-        #     #            n['diesel_LCA']['total_emissions_tonco2_tonmi']), 3)) + \
-        #
-        #     # str(round(n['peak']['daily_supply_mwh'], 2)) + ' MWh/day' + '<br>' + \
-        #     # str(int(n['peak']['number_loc'])) + ' loc/day at peak' + '<br>' + \
-        #     # str(round(-n['peak']['daily_demand_mwh'], 2)) + ' MWh at peak demand' + '<br>' + \
-        #     # str(round(-n['avg']['daily_demand_mwh'], 2)) + ' MWh at avg demand'
-        #
-        #     fig.add_trace(
-        #         go.Scattergeo(
-        #             uid=n['nodeid'],
-        #             locationmode='USA-states',
-        #             lon=[n['geometry'].x],
-        #             lat=[n['geometry'].y],
-        #             hovertemplate=text,
-        #             # mode='markers+text',
-        #             # text=str(round(n['energy_source_TEA']['number_chargers'])),
-        #             # textfont=dict(color='black', size=14),
-        #             marker=dict(
-        #                 size=5 * np.log(peak_charged_mwh + 10),
-        #                 # size=25,
-        #                 color=green4,
-        #                 sizemode='area',
-        #             ),
-        #             # opacity=1,
-        #             opacity=0.8,
-        #             legendgroup=lg_group,
-        #             name='Charging Facility',
-        #             showlegend=legend_bool[0],
-        #         ),
-        #         # row=row, col=col
-        #     )
-        #     # fig.update_traces(
-        #     #     hovertemplate=text,
-        #     #     marker=dict(
-        #     #         size=5 * np.log(peak_charged_mwh + 10),
-        #     #         # size=30,
-        #     #         color=green4,
-        #     #         sizemode='area',
-        #     #     ),
-        #     #     opacity=0.8,
-        #     #     legendgroup=lg_group,
-        #     #     name='Charging Facility',
-        #     #     showlegend=legend_bool[0],
-        #     #     selector=dict(uid=n['nodeid']),
-        #     #     overwrite=True
-        #     # )
-        #
-        #     legend_bool[0] = False
         if n['covered'] == 1:
             text = n['city'] + ', ' + n['state']
             lg_group = 1
@@ -992,179 +699,8 @@ def battery_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist
                 ),
                 # row=row, col=col
             )
-            # fig.update_traces(
-            #     hovertemplate=text,
-            #     marker=dict(size=4,
-            #                 color=green4,
-            #                 symbol='square'),
-            #     legendgroup=lg_group,
-            #     name='Covered (Non-Charging) Facility',
-            #     showlegend=legend_bool[1],
-            #     selector=dict(uid=n['nodeid']),
-            #     overwrite=True
-            #     )
             legend_bool[1] = False
     print('\t COVERED NODES:: ' + str(time.time() - t0))
-
-    # for i in range(len(nodes_gdf)):
-    #     n = nodes_gdf.loc[nodes_gdf.index[i]]
-    #     # if n['nodeid'] in od_set:
-    #     #     fig.add_trace(
-    #     #         go.Scattergeo(
-    #     #             uid=n['nodeid'],
-    #     #             locationmode='USA-states',
-    #     #             lon=[n['geometry'].x],
-    #     #             lat=[n['geometry'].y],
-    #     #             # hovertemplate=text,
-    #     #             marker=dict(
-    #     #                 # size=5 * np.log(peak_charged_mwh + 10),
-    #     #                 size=15,
-    #     #                 color=red,
-    #     #                 symbol='diamond',
-    #     #             ),
-    #     #             opacity=1,
-    #     #             legendgroup=lg_group,
-    #     #             name='O/D',
-    #     #             showlegend=legend_bool[0],
-    #     #         ),
-    #     #         # row=row, col=col
-    #     #     )
-    #     #     legend_bool[0] = False
-    #     # continue
-    #
-    #     if n['facility'] == 1:
-    #         if n['avg']['energy_transfer'] == 1:
-    #             avg_charged_mwh = -n['avg']['daily_demand_mwh']
-    #             peak_charged_mwh = -n['peak']['daily_demand_mwh']
-    #         else:
-    #             avg_charged_mwh = n['avg']['daily_supply_mwh']
-    #             peak_charged_mwh = n['peak']['daily_supply_mwh']
-    #         if (n['energy_source_TEA']['avg_queue_time_p_loc'] is not None) and (n['energy_source_TEA']['peak_queue_time_p_loc'] is not None):
-    #             text = n['city'] + ', ' + n['state'] + '<br>' + \
-    #                    str(round(avg_charged_mwh, 2)) + ' MWh/day <br>' + \
-    #                    str(int(n['avg']['number_loc'])) + ' loc/day <br>' + \
-    #                    str(n['energy_source_TEA']['number_chargers']) + ' chargers <br>' + \
-    #                    'Avg. Queue Time: ' + str(round(n['energy_source_TEA']['avg_queue_time_p_loc'], 2)) + ' hrs <br>' + \
-    #                    'Avg. Queue Length: ' + str(round(n['energy_source_TEA']['avg_queue_length'], 2)) + ' loc <br>' + \
-    #                    'Peak Queue Time: ' + str(round(n['energy_source_TEA']['peak_queue_time_p_loc'], 2)) + \
-    #                    ' hrs <br>' + \
-    #                    'Peak Queue Length: ' + str(round(n['energy_source_TEA']['peak_queue_length'], 2)) + ' loc <br>' + \
-    #                    'Utilized ' + str(round(n['energy_source_TEA']['actual_utilization'] * 24, 1)) + ' hrs/day <br>' + \
-    #                    'Total LCO: ' + str(round(n['energy_source_TEA']['total_LCO'], 3)) + ' $/kWh <br>' + \
-    #                    'WTW Emissions: ' + str(round(n['energy_source_LCA']['emissions_tonco2_kwh'] * 1e6, 3)) + \
-    #                    ' g CO<sub>2</sub>' + '/kWh <br>' + \
-    #                    'Capital Cost: \t $' + str(round(n['energy_source_TEA']['station_total'] / 1e6, 2)) + ' M <br>' + \
-    #                    'Avg. Delay cost per car: \t $' + \
-    #                    str(round(n['energy_source_TEA']['avg_daily_delay_cost_p_car'], 2)) + '<br>' + \
-    #                    'Avg. Daily Delay cost per loc: \t $' + \
-    #                    str(round(n['energy_source_TEA']['avg_daily_delay_cost_p_loc'], 2)) + '<br>' + \
-    #                    'Total Daily Delay Cost: \t $' + \
-    #                    str(round(n['energy_source_TEA']['total_daily_delay_cost'] / 1e3, 2)) + ' K<br>'
-    #         else:
-    #             text = n['city'] + ', ' + n['state'] + '<br>' + \
-    #                    str(round(avg_charged_mwh, 2)) + ' MWh/day <br>' + \
-    #                    str(int(n['avg']['number_loc'])) + ' loc/day <br>' + \
-    #                    str(n['energy_source_TEA']['number_chargers']) + ' chargers <br>' + \
-    #                    'Avg. Queue Time: ' + str(
-    #                 round(0, 2)) + ' hrs <br>' + \
-    #                    'Avg. Queue Length: ' + str(round(0, 2)) + ' loc <br>' + \
-    #                    'Peak Queue Time: ' + str(round(0, 2)) + \
-    #                    ' hrs <br>' + \
-    #                    'Peak Queue Length: ' + str(
-    #                 round(0, 2)) + ' loc <br>' + \
-    #                    'Utilized ' + str(
-    #                 round(n['energy_source_TEA']['actual_utilization'] * 24, 1)) + ' hrs/day <br>' + \
-    #                    'Total LCO: ' + str(round(n['energy_source_TEA']['total_LCO'], 3)) + ' $/kWh <br>' + \
-    #                    'WTW Emissions: ' + str(round(n['energy_source_LCA']['emissions_tonco2_kwh'] * 1e6, 3)) + \
-    #                    ' g CO<sub>2</sub>' + '/kWh <br>' + \
-    #                    'Capital Cost: \t $' + str(round(n['energy_source_TEA']['station_total'] / 1e6, 2)) + ' M <br>' + \
-    #                    'Avg. Delay cost per car: \t $' + \
-    #                    str(round(0, 2)) + '<br>' + \
-    #                    'Avg. Daily Delay cost per loc: \t $' + \
-    #                    str(round(0, 2)) + '<br>' + \
-    #                    'Total Daily Delay Cost: \t $' + \
-    #                    str(round(0, 2)) + ' K<br>'
-    #         #  + str(round(1e-3 * (n['energy_source_TEA']['total_LCO'] -
-    #         #                   n['diesel_TEA']['total_LCO_tonmi']) /
-    #         #           (n['energy_source_LCA']['avg_emissions_tonco2_tonmi'] -
-    #         #            n['diesel_LCA']['total_emissions_tonco2_tonmi']), 3)) + \
-    #
-    #         # str(round(n['peak']['daily_supply_mwh'], 2)) + ' MWh/day' + '<br>' + \
-    #         # str(int(n['peak']['number_loc'])) + ' loc/day at peak' + '<br>' + \
-    #         # str(round(-n['peak']['daily_demand_mwh'], 2)) + ' MWh at peak demand' + '<br>' + \
-    #         # str(round(-n['avg']['daily_demand_mwh'], 2)) + ' MWh at avg demand'
-    #
-    #         fig.add_trace(
-    #             go.Scattergeo(
-    #                 uid=n['nodeid'],
-    #                 locationmode='USA-states',
-    #                 lon=[n['geometry'].x],
-    #                 lat=[n['geometry'].y],
-    #                 hovertemplate=text,
-    #                 mode='markers+text',
-    #                 text=str(round(n['avg']['number_loc'])),
-    #                 textfont=dict(color='black', size=14),
-    #                 marker=dict(
-    #                     size=5 * np.log(peak_charged_mwh + 10),
-    #                     # size=25,
-    #                     color=green4,
-    #                     sizemode='area',
-    #                 ),
-    #                 opacity=0.8,
-    #                 legendgroup=lg_group,
-    #                 name='Charging Facility',
-    #                 showlegend=legend_bool[0],
-    #             ),
-    #             # row=row, col=col
-    #         )
-    #         # fig.update_traces(
-    #         #     hovertemplate=text,
-    #         #     marker=dict(
-    #         #         size=5 * np.log(peak_charged_mwh + 10),
-    #         #         # size=30,
-    #         #         color=green4,
-    #         #         sizemode='area',
-    #         #     ),
-    #         #     opacity=0.8,
-    #         #     legendgroup=lg_group,
-    #         #     name='Charging Facility',
-    #         #     showlegend=legend_bool[0],
-    #         #     selector=dict(uid=n['nodeid']),
-    #         #     overwrite=True
-    #         # )
-    #
-    #         legend_bool[0] = False
-    #     # elif n['covered'] == 1:
-    #     #     text = n['city'] + ', ' + n['state']
-    #     #     lg_group = 1
-    #     #     fig.add_trace(
-    #     #         go.Scattergeo(
-    #     #             uid=n['nodeid'],
-    #     #             locationmode='USA-states',
-    #     #             lon=[n['geometry'].x],
-    #     #             lat=[n['geometry'].y],
-    #     #             hovertemplate=text,
-    #     #             marker=dict(size=6,
-    #     #                         color=green4,
-    #     #                         symbol='square'),
-    #     #             legendgroup=lg_group,
-    #     #             name='Covered (Non-Charging) Facility',
-    #     #             showlegend=legend_bool[1],
-    #     #         ),
-    #     #         # row=row, col=col
-    #     #     )
-    #         # fig.update_traces(
-    #         #     hovertemplate=text,
-    #         #     marker=dict(size=4,
-    #         #                 color=green4,
-    #         #                 symbol='square'),
-    #         #     legendgroup=lg_group,
-    #         #     name='Covered (Non-Charging) Facility',
-    #         #     showlegend=legend_bool[1],
-    #         #     selector=dict(uid=n['nodeid']),
-    #         #     overwrite=True
-    #         #     )
-    #         legend_bool[1] = False
 
     if additional_plots:
         if figlist:
@@ -1182,15 +718,6 @@ def battery_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist
                     x=0.5,
                     font=dict(size=12, color=black)
                 ),
-                # legend=dict(
-                #     itemsizing='trace',
-                #     yanchor='middle',
-                #     xanchor='right',
-                #     orientation='v',
-                #     x=.9,
-                #     y=0.5,
-                #     font=dict(size=12, color=black)
-                # ),
             )
             for annotation in fig.layout.annotations:
                 annotation.font.size = 12
@@ -1207,7 +734,6 @@ def battery_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist
             # table for cost of avoided emissions
             figs.append(battery_cost_avoided_table(G=G, comm_group=comm_group))
             fig = figs
-            labels = ['Map', 'Table', 'Emissions', 'Cost', 'Ton-Miles', 'CAE']
         else:
             # pie charts for operational stats
             fig = battery_pie_operations_plot(G=G, comm_group=comm_group, fig=fig)
@@ -1232,14 +758,6 @@ def battery_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist
                     y=0.5,
                     font=dict(size=12, color=black)
                 ),
-                # legend=dict(
-                #     orientation='h',
-                #     yanchor="top",
-                #     y=0.99,
-                #     xanchor="right",
-                #     x=0.2,
-                # ),
-                # margin=dict(l=0, r=0, t=0, b=0),
             )
             for annotation in fig.layout.annotations:
                 annotation.font.size = 12
@@ -1250,25 +768,17 @@ def battery_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist
         fig_title = ''
         fig.update_layout(title=dict(text=fig_title, font=dict(color='black', size=6)), font=dict(color='black'),
                           showlegend=legend_show,
-                          # legend=dict(
-                          #     yanchor="top",
-                          #     y=0.99,
-                          #     xanchor="right",
-                          #     x=0.99,
-                          # ),
                           legend=dict(
                               yanchor='middle',
                               xanchor='right',
                               orientation='v',
                               x=.9,
                               y=0.5),
-                          # margin=dict(l=0, r=0, t=0, b=0),
                           )
         for annotation in fig.layout.annotations:
             annotation.font.size = 12
-        labels = []
 
-    return fig, labels
+    return fig
 
 
 def hybrid_pie_operations_plot(G, comm_group: str, fig=None):
@@ -1890,15 +1400,6 @@ def hybrid_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist=
                        str(round(0, 2)) + '<br>' + \
                        'Total Daily Delay Cost: \t $' + \
                        str(round(0, 2)) + ' K<br>'
-            #  + str(round(1e-3 * (n['energy_source_TEA']['total_LCO'] -
-            #                   n['diesel_TEA']['total_LCO_tonmi']) /
-            #           (n['energy_source_LCA']['avg_emissions_tonco2_tonmi'] -
-            #            n['diesel_LCA']['total_emissions_tonco2_tonmi']), 3)) + \
-
-            # str(round(n['peak']['daily_supply_mwh'], 2)) + ' MWh/day' + '<br>' + \
-            # str(int(n['peak']['number_loc'])) + ' loc/day at peak' + '<br>' + \
-            # str(round(-n['peak']['daily_demand_mwh'], 2)) + ' MWh at peak demand' + '<br>' + \
-            # str(round(-n['avg']['daily_demand_mwh'], 2)) + ' MWh at avg demand'
 
             fig.add_trace(
                 go.Scattergeo(
@@ -1924,54 +1425,8 @@ def hybrid_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist=
                 ),
                 # row=row, col=col
             )
-            # fig.update_traces(
-            #     hovertemplate=text,
-            #     marker=dict(
-            #         size=5 * np.log(peak_charged_mwh + 10),
-            #         # size=30,
-            #         color=green4,
-            #         sizemode='area',
-            #     ),
-            #     opacity=0.8,
-            #     legendgroup=lg_group,
-            #     name='Charging Facility',
-            #     showlegend=legend_bool[0],
-            #     selector=dict(uid=n['nodeid']),
-            #     overwrite=True
-            # )
 
             legend_bool[0] = False
-        # elif n['covered'] == 1:
-        #     text = n['city'] + ', ' + n['state']
-        #     lg_group = 1
-        #     fig.add_trace(
-        #         go.Scattergeo(
-        #             uid=n['nodeid'],
-        #             locationmode='USA-states',
-        #             lon=[n['geometry'].x],
-        #             lat=[n['geometry'].y],
-        #             hovertemplate=text,
-        #             marker=dict(size=6,
-        #                         color=green4,
-        #                         symbol='square'),
-        #             legendgroup=lg_group,
-        #             name='Covered (Non-Charging) Facility',
-        #             showlegend=legend_bool[1],
-        #         ),
-        #         # row=row, col=col
-        #     )
-        #     # fig.update_traces(
-        #     #     hovertemplate=text,
-        #     #     marker=dict(size=4,
-        #     #                 color=green4,
-        #     #                 symbol='square'),
-        #     #     legendgroup=lg_group,
-        #     #     name='Covered (Non-Charging) Facility',
-        #     #     showlegend=legend_bool[1],
-        #     #     selector=dict(uid=n['nodeid']),
-        #     #     overwrite=True
-        #     #     )
-        #     legend_bool[1] = False
     print('\t FACILITY NODES:: ' + str(time.time() - t0))
 
     t0 = time.time()
@@ -1997,17 +1452,6 @@ def hybrid_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist=
                 ),
                 # row=row, col=col
             )
-            # fig.update_traces(
-            #     hovertemplate=text,
-            #     marker=dict(size=4,
-            #                 color=green4,
-            #                 symbol='square'),
-            #     legendgroup=lg_group,
-            #     name='Covered (Non-Charging) Facility',
-            #     showlegend=legend_bool[1],
-            #     selector=dict(uid=n['nodeid']),
-            #     overwrite=True
-            #     )
             legend_bool[1] = False
     print('\t COVERED NODES:: ' + str(time.time() - t0))
 
@@ -2027,15 +1471,6 @@ def hybrid_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist=
                     x=0.5,
                     font=dict(size=12, color=black)
                 ),
-                # legend=dict(
-                #     itemsizing='trace',
-                #     yanchor='middle',
-                #     xanchor='right',
-                #     orientation='v',
-                #     x=.9,
-                #     y=0.5,
-                #     font=dict(size=12, color=black)
-                # ),
             )
             for annotation in fig.layout.annotations:
                 annotation.font.size = 12
@@ -2052,7 +1487,6 @@ def hybrid_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist=
             # table for cost of avoided emissions
             figs.append(hybrid_cost_avoided_table(G=G, comm_group=comm_group))
             fig = figs
-            labels = ['Map', 'Table', 'Emissions', 'Cost', 'Ton-Miles', 'CAE']
         else:
             # pie charts for operational stats
             fig = hybrid_pie_operations_plot(G=G, comm_group=comm_group, fig=fig)
@@ -2089,7 +1523,6 @@ def hybrid_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist=
             for annotation in fig.layout.annotations:
                 annotation.font.size = 12
 
-            labels = []
     else:
         fig.update_geos(projection_type="albers usa")
         fig_title = ''
@@ -2111,9 +1544,8 @@ def hybrid_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlist=
                           )
         for annotation in fig.layout.annotations:
             annotation.font.size = 12
-        labels = []
 
-    return fig, labels
+    return fig
 
 
 def plot_states_bg():
@@ -2979,67 +2411,6 @@ def hydrogen_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlis
 
     print('\t EDGES:: ' + str(time.time() - t0))
 
-    # legend_name = 'Hydrogen Network'
-    # legend_bool = True
-    # lg_group = 1
-    # edge_set = set()
-    # for u, v in edges_gdf.index:
-    #     # plot baseline (all edges) first
-    #     if edges_gdf.loc[(u, v), 'covered'] == 1 and (u, v) not in edge_set:
-    #         edge_set.update({(u, v), (v, u)})
-    #
-    #         e = edges_gdf.loc[(u, v)]
-    #         e_rev = edges_gdf.loc[(v, u)]
-    #         e_tot_hydro_avg_ton = round(e['hydrogen_avg_ton'][comm_group] + e_rev['hydrogen_avg_ton'][comm_group])
-    #         e_tot_hydro_avg_loc = round(e['hydrogen_avg_loc'][comm_group] + e_rev['hydrogen_avg_loc'][comm_group])
-    #         e_tot_all_avg_ton = (e['hydrogen_avg_ton'][comm_group] + e['support_diesel_avg_ton'][comm_group] +
-    #                              e_rev['hydrogen_avg_ton'][comm_group] + e['support_diesel_avg_ton'][comm_group])
-    #         if np.floor(e_tot_all_avg_ton) == 0:
-    #             e_weight_hydrogen_perc_ton = 0
-    #         else:
-    #             e_weight_hydrogen_perc_ton = round(100 * e_tot_hydro_avg_ton / e_tot_all_avg_ton, 2)
-    #
-    #         text = str(round(e['miles'])) + ' miles' + '<br>' + \
-    #                str(e_tot_hydro_avg_ton) + ' ' + comm_group.capitalize() + ' tons/day' + '<br>' + \
-    #                str(e_tot_hydro_avg_loc) + ' ' + comm_group.capitalize() + ' loc/day' + '<br>' + \
-    #                'Share of ' + comm_group.lower() + ' tons moved by hydrogen: ' + \
-    #                str(e_weight_hydrogen_perc_ton) + '%'
-    #
-    #         fig.add_trace(
-    #             go.Scattergeo(
-    #                 uid=str(u) + '_' + str(v),
-    #                 locationmode='USA-states',
-    #                 lon=list(e['geometry'].xy[0]),
-    #                 lat=list(e['geometry'].xy[1]),
-    #                 hovertemplate=text,
-    #                 mode='lines',
-    #                 line=dict(
-    #                     width=line_size(e_tot_all_avg_ton),
-    #                     color=green4,
-    #                 ),
-    #                 opacity=1,
-    #                 legendgroup=lg_group,
-    #                 name=legend_name,
-    #                 showlegend=legend_bool,
-    #             ),
-    #             # row=row, col=col
-    #         )
-    #         legend_bool = False
-    #
-    #         # fig.update_traces(
-    #         #     hovertemplate=text,
-    #         #     line=dict(
-    #         #         width=line_size(e_tot_all_avg_ton),
-    #         #         color=green4,
-    #         #     ),
-    #         #     opacity=1,
-    #         #     legendgroup=lg_group,
-    #         #     name=legend_name,
-    #         #     showlegend=legend_bool,
-    #         #     selector=dict(uid=str(v) + '_' + str(u)),
-    #         #     overwrite=True
-    #         # )
-
     legend_bool = [True, True]
     for i in range(len(nodes_gdf)):
         n = nodes_gdf.loc[nodes_gdf.index[i]]
@@ -3094,21 +2465,6 @@ def hydrogen_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlis
                 ),
                 # row=row, col=col
             )
-            # fig.update_traces(
-            #     hovertemplate=text,
-            #     marker=dict(
-            #         size=5 * np.log(peak_charged_mwh + 10),
-            #         # size=30,
-            #         color=green4,
-            #         sizemode='area',
-            #     ),
-            #     opacity=0.8,
-            #     legendgroup=lg_group,
-            #     name='Charging Facility',
-            #     showlegend=legend_bool[0],
-            #     selector=dict(uid=n['nodeid']),
-            #     overwrite=True
-            # )
 
             legend_bool[0] = False
         elif n['covered'] == 1:
@@ -3130,231 +2486,11 @@ def hydrogen_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlis
                 ),
                 # row=row, col=col
             )
-            # fig.update_traces(
-            #     hovertemplate=text,
-            #     marker=dict(size=4,
-            #                 color=green4,
-            #                 symbol='square'),
-            #     legendgroup=lg_group,
-            #     name='Covered (Non-Charging) Facility',
-            #     showlegend=legend_bool[1],
-            #     selector=dict(uid=n['nodeid']),
-            #     overwrite=True
-            #     )
             legend_bool[1] = False
-
-    # return fig, labels
-
-    # if fig is None:
-    #     if additional_plots and not figlist:
-    #         fig = make_subplots(
-    #             rows=4, cols=3,
-    #             specs=[[None, None, {"type": "scattergeo", "rowspan": 4}],
-    #                    [{"type": "xy", 'secondary_y': True}, {"type": "bar"}, None],
-    #                    [{"type": "domain"}, {"type": "table"}, None],
-    #                    [{"type": "table", 'colspan': 2}, None, None]],
-    #             column_widths=[0.1, 0.1, 0.8],
-    #             row_heights=[0.02, 0.25, 0.25, 0.48],
-    #             horizontal_spacing=0.1,
-    #             subplot_titles=(None,
-    #                             'WTW Emissions', 'Levelized Cost of Operation',
-    #                             comm_group.capitalize() + ' Ton-Miles', None,
-    #                             None)
-    #         )
-    #         row = 1
-    #         col = 3
-    #     else:
-    #         fig = make_subplots(
-    #             rows=1, cols=1,
-    #             specs=[[{"type": "scattergeo"}]]
-    #         )
-    #         row = 1
-    #         col = 1
-    #
-    # G = project_graph(G.copy(), to_crs=crs)
-    # nodes_gdf, edges_gdf = gdfs_from_graph(G, smooth_geometry=True)
-    #
-    # edges_gdf['lons'] = edges_gdf['geometry'].apply(lambda c: list(c.xy[0]))
-    # edges_gdf['lats'] = edges_gdf['geometry'].apply(lambda c: list(c.xy[1]))
-    #
-    # legend_names = ['Hydrogen Network', 'Diesel Network']
-    # legend_bool = [True, True]
-    # for i in range(len(edges_gdf)):
-    #     # plot baseline (all edges) first
-    #     if edges_gdf.loc[edges_gdf.index[i], 'covered'] == 0:
-    #         lg_group = 2
-    #         fig.add_trace(
-    #             go.Scattergeo(
-    #                 locationmode='USA-states',
-    #                 lon=edges_gdf['lons'][i],
-    #                 lat=edges_gdf['lats'][i],
-    #                 hoverinfo='skip',
-    #                 mode='lines',
-    #                 line=dict(width=1,
-    #                           color=purple),
-    #                 opacity=0.5,
-    #                 legendgroup=lg_group,
-    #                 name=legend_names[lg_group - 1],
-    #                 showlegend=legend_bool[lg_group - 1]
-    #             ),
-    #             row=row, col=col
-    #         )
-    #         legend_bool[lg_group - 1] = False
-    # # sum up flows from both directions for plotting on undirected edges
-    # edge_set_undirected = {(u, v) for u, v in edges_gdf.index}.union({(v, u) for u, v in edges_gdf.index})
-    # edges_gdf.fillna(0, inplace=True)
-    # for u, v in edge_set_undirected:
-    #     tot_tons = edges_gdf.loc[(u, v), 'hydrogen_avg_ton'][comm_group] + \
-    #                edges_gdf.loc[(v, u), 'hydrogen_avg_ton'][comm_group]
-    #     edges_gdf.loc[(u, v), 'total_tons'] = tot_tons
-    #     edges_gdf.loc[(v, u), 'total_tons'] = tot_tons
-    # edges_gdf.sort_values(by=['total_tons'], inplace=True)
-    # for u, v in edges_gdf.index:
-    #     e = edges_gdf.loc[(u, v)]
-    #     e_rev = edges_gdf.loc[(v, u)]
-    #     e_tot_hydro_avg_ton = round(e['hydrogen_avg_ton'][comm_group] + e_rev['hydrogen_avg_ton'][comm_group])
-    #     e_tot_hydro_avg_loc = round(e['hydrogen_avg_loc'][comm_group] + e_rev['hydrogen_avg_loc'][comm_group])
-    #     e_tot_all_avg_ton = (e['hydrogen_avg_ton'][comm_group] + e['support_diesel_avg_ton'][comm_group] +
-    #                          e_rev['hydrogen_avg_ton'][comm_group] + e['support_diesel_avg_ton'][comm_group])
-    #     if np.floor(e_tot_all_avg_ton) == 0:
-    #         e_weight_hydrogen_perc_ton = 0
-    #     else:
-    #         e_weight_hydrogen_perc_ton = round(100 * e_tot_hydro_avg_ton / e_tot_all_avg_ton, 2)
-    #     if e['covered'] == 1:
-    #         text = str(round(e['miles'])) + ' miles' + '<br>' + \
-    #                str(e_tot_hydro_avg_ton) + ' ' + comm_group.capitalize() + ' tons/day' + '<br>' + \
-    #                str(e_tot_hydro_avg_loc) + ' ' + comm_group.capitalize() + ' loc/day' + '<br>' + \
-    #                'Share of ' + comm_group.lower() + ' tons moved by hydrogen: ' + \
-    #                str(e_weight_hydrogen_perc_ton) + '%'
-    #         lg_group = 1
-    #         fig.add_trace(
-    #             go.Scattergeo(
-    #                 locationmode='USA-states',
-    #                 lon=e['lons'],
-    #                 lat=e['lats'],
-    #                 hovertemplate=text,
-    #                 mode='lines',
-    #                 line=dict(
-    #                     width=line_size(e_tot_all_avg_ton),
-    #                     color=green4,
-    #                 ),
-    #                 # opacity=1,
-    #                 legendgroup=lg_group,
-    #                 name=legend_names[lg_group - 1],
-    #                 showlegend=legend_bool[lg_group - 1]
-    #             ),
-    #             row=row, col=col
-    #         )
-    #         legend_bool[lg_group - 1] = False
-    #
-    # legend_bool = [True, True, True]
-    # for i in range(len(nodes_gdf)):
-    #     n = nodes_gdf.loc[nodes_gdf.index[i]]
-    #     # plot baseline (all nodes) first
-    #     lg_group = 2
-    #     fig.add_trace(
-    #         go.Scattergeo(
-    #             locationmode='USA-states',
-    #             lon=[n['geometry'].x],
-    #             lat=[n['geometry'].y],
-    #             hoverinfo='skip',
-    #             marker=dict(size=1,
-    #                         color=purple,
-    #                         symbol='triangle-up'),
-    #             legendgroup=lg_group,
-    #             name=legend_names[lg_group - 1],
-    #             showlegend=legend_bool[1]
-    #         ),
-    #         row=row, col=col
-    #     )
-    #     legend_bool[lg_group - 1] = False
-    #     if n['facility'] == 1:
-    #         if n['avg']['energy_transfer'] == 1:
-    #             avg_pumped_kgh2 = -n['avg']['daily_demand_kgh2']
-    #             peak_pumped_kgh2 = -n['peak']['daily_demand_kgh2']
-    #         else:
-    #             avg_pumped_kgh2 = n['avg']['daily_supply_kgh2']
-    #             peak_pumped_kgh2 = n['peak']['daily_supply_kgh2']
-    #         text = n['city'] + ', ' + n['state'] + '<br>' + \
-    #                str(round(avg_pumped_kgh2, 2)) + ' kgh2/day <br>' + \
-    #                str(int(n['avg']['number_loc'])) + ' loc/day <br>' + \
-    #                str(n['energy_source_TEA']['number_pumps']) + ' pumps <br>' + \
-    #                'Avg. Queue Time: ' + str(round(n['energy_source_TEA']['avg_queue_time_p_loc'], 2)) + ' hrs <br>' + \
-    #                'Avg. Queue Length: ' + str(round(n['energy_source_TEA']['avg_queue_length'], 2)) + ' loc <br>' + \
-    #                'Peak Queue Time: ' + str(round(n['energy_source_TEA']['peak_queue_time_p_loc'], 2)) + \
-    #                ' hrs <br>' + \
-    #                'Peak Queue Length: ' + str(round(n['energy_source_TEA']['peak_queue_length'], 2)) + ' loc <br>' + \
-    #                'Utilized ' + str(round(n['energy_source_TEA']['actual_utilization'] * 24, 1)) + ' hrs/day <br>' + \
-    #                'Total LCO: ' + str(round(n['energy_source_TEA']['total_LCO'], 3)) + ' $/kgh2 <br>' + \
-    #                'WTW Emissions: ' + str(round(n['energy_source_LCA']['emissions_tonco2_kgh2'] * 1e6, 3)) + \
-    #                ' g CO<sub>2</sub>' + '/kgh2 <br>' + \
-    #                'Capital Cost: \t $' + str(round(n['energy_source_TEA']['station_total'] / 1e6, 2)) + ' M <br>' + \
-    #                'Avg. Delay cost per car: \t $' + \
-    #                str(round(n['energy_source_TEA']['avg_daily_delay_cost_p_car'], 2)) + '<br>' + \
-    #                'Avg. Daily Delay cost per loc: \t $' + \
-    #                str(round(n['energy_source_TEA']['avg_daily_delay_cost_p_loc'], 2)) + '<br>' + \
-    #                'Total Daily Delay Cost: \t $' + \
-    #                str(round(n['energy_source_TEA']['total_daily_delay_cost'] / 1e3, 2)) + ' K<br>'
-    #         #  + str(round(1e-3 * (n['energy_source_TEA']['total_LCO'] -
-    #         #                   n['diesel_TEA']['total_LCO_tonmi']) /
-    #         #           (n['energy_source_LCA']['avg_emissions_tonco2_tonmi'] -
-    #         #            n['diesel_LCA']['total_emissions_tonco2_tonmi']), 3)) + \
-    #
-    #         # str(round(n['peak']['daily_supply_mwh'], 2)) + ' MWh/day' + '<br>' + \
-    #         # str(int(n['peak']['number_loc'])) + ' loc/day at peak' + '<br>' + \
-    #         # str(round(-n['peak']['daily_demand_mwh'], 2)) + ' MWh at peak demand' + '<br>' + \
-    #         # str(round(-n['avg']['daily_demand_mwh'], 2)) + ' MWh at avg demand'
-    #         lg_group = 1
-    #         fig.add_trace(
-    #             go.Scattergeo(
-    #                 locationmode='USA-states',
-    #                 lat=[n['geometry'].y],
-    #                 lon=[n['geometry'].x],
-    #                 # hoverinfo='text',
-    #                 # text=text,
-    #                 hovertemplate=text,
-    #                 marker=dict(
-    #                     # want no bigger than size 50; simple scaling (since min is always 0 here)
-    #                     # size=50 * (n['facility_size'] -
-    #                     #            min(nodes_gdf['facility_size'])) / (max(nodes_gdf['facility_size']) -
-    #                     #                                                min(nodes_gdf['facility_size'])),
-    #                     size=5 * np.log(peak_pumped_kgh2 + 10),
-    #                     # size=30,
-    #                     color=green4,
-    #                     sizemode='area',
-    #                 ),
-    #                 opacity=0.8,
-    #                 legendgroup=lg_group,
-    #                 name='Refueling Facility',
-    #                 showlegend=legend_bool[2]
-    #             ),
-    #             row=row, col=col
-    #         )
-    #         legend_bool[2] = False
-    #     elif n['covered'] == 1:
-    #         text = n['city'] + ', ' + n['state']
-    #         lg_group = 1
-    #         fig.add_trace(
-    #             go.Scattergeo(
-    #                 locationmode='USA-states',
-    #                 lon=[n['geometry'].x],
-    #                 lat=[n['geometry'].y],
-    #                 hovertemplate=text,
-    #                 marker=dict(size=4,
-    #                             color=green4,
-    #                             symbol='square'),
-    #                 legendgroup=lg_group,
-    #                 name='Covered (Non-Refueling) Facility',
-    #                 showlegend=legend_bool[lg_group - 1]
-    #             ),
-    #             row=row, col=col
-    #         )
-    #         legend_bool[lg_group - 1] = False
 
     if additional_plots:
         if figlist:
             fig.update_geos(projection_type="albers usa")
-            fig_title = ''
             fig.update_layout(
                 autosize=True,
                 margin=dict(l=0, r=0, b=300, t=0, pad=1),
@@ -3384,7 +2520,6 @@ def hydrogen_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlis
             # table for cost of avoided emissions
             figs.append(hydrogen_cost_avoided_table(G=G, comm_group=comm_group))
             fig = figs
-            labels = ['Map', 'Table', 'Emissions', 'Cost', 'Ton-Miles', 'CAE']
         else:
             # pie charts for operational stats
             fig = hydrogen_pie_operations_plot(G=G, comm_group=comm_group, fig=fig)
@@ -3412,14 +2547,7 @@ def hydrogen_plot(G, comm_group: str, additional_plots=True, crs='WGS84', figlis
             for annotation in fig.layout.annotations:
                 annotation.font.size = 12
 
-            labels = []
-    else:
-        labels = []
-
-    # if figshow:
-    #     fig.show()
-
-    return fig, labels
+    return fig
 
 
 '''
@@ -3878,7 +3006,7 @@ def dropin_cost_avoided_table(G, fuel_type: str, comm_group: str, fig=None):
 
 
 def dropin_plot(G, fuel_type: str, deployment_perc: float, comm_group: str, additional_plots=True,
-                crs='WGS84', figlist=False, fig=None, figshow=True, legend_show=True):
+                crs='WGS84', figlist=False, fig=None, legend_show=True):
     # perform plotting fdor dropin fuels, showing emissions by thickness and
     # aggregate plots displaying relevant summary of results, make commodity specific
 
@@ -4018,16 +3146,6 @@ def dropin_plot(G, fuel_type: str, deployment_perc: float, comm_group: str, addi
                     x=0.5,
                     font=dict(size=12, color=black)
                 ),
-                # legend=dict(
-                #     title_text='Tons per Day:',
-                #     itemsizing='trace',
-                #     orientation='v',
-                #     yanchor="middle",
-                #     y=0.5,
-                #     xanchor="right",
-                #     x=0.9,
-                #     font=dict(size=12, color=black)
-                # ),
             )
 
             for annotation in fig.layout.annotations:
@@ -4046,7 +3164,6 @@ def dropin_plot(G, fuel_type: str, deployment_perc: float, comm_group: str, addi
             # table for cost of avoided emissions
             figs.append(dropin_cost_avoided_table(G=G, fuel_type=fuel_type, comm_group=comm_group))
             fig = figs
-            labels = ['Map', 'Table', 'Emissions', 'Cost', 'Ton-Miles', 'CAE']
         else:
             # pie charts for operational stats
             fig = dropin_pie_operations_plot(G, fuel_type, deployment_perc, comm_group, fig)
@@ -4068,7 +3185,6 @@ def dropin_plot(G, fuel_type: str, deployment_perc: float, comm_group: str, addi
             for annotation in fig.layout.annotations:
                 annotation.font.size = 12
 
-            labels = []
     else:
         fig.update_geos(projection_type="albers usa")
         fig_title = ''
@@ -4079,12 +3195,7 @@ def dropin_plot(G, fuel_type: str, deployment_perc: float, comm_group: str, addi
         for annotation in fig.layout.annotations:
             annotation.font.size = 12
 
-        labels = []
-
-    # if figshow:
-    #     fig.show()
-
-    return fig, labels
+    return fig
 
 
 '''

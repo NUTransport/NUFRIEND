@@ -292,14 +292,13 @@ def run_scenario_file(scenario_code: str, G: nx.DiGraph = None, plot=True, load_
 
     if plot:
         t0 = time.time()
-        fig, label = plot_scenario(G, fuel_type=fuel_type, deployment_perc=deployment_perc, comm_group=comm_group,
-                                   legend_show=legend_show)
+        fig = plot_scenario(G, fuel_type=fuel_type, deployment_perc=deployment_perc, comm_group=comm_group,
+                            legend_show=legend_show)
         print('PLOTTING:: %s seconds ---' % round(time.time() - t0, 3))
     else:
         fig = None
-        label = None
 
-    return G, fig, label
+    return G, fig
 
 
 def operations_stats(G: nx.DiGraph) -> nx.DiGraph:

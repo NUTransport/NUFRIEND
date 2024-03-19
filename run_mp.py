@@ -6,7 +6,7 @@ from facility_sizing_mp import facility_sizing_mp
 from tea_mp import tea_battery_mp, tea_diesel_mp, tea_hydrogen_mp
 from lca_mp import lca_battery_mp, lca_diesel_mp, lca_hydrogen_mp
 from routing_mp import route_flows_mp, od_flows_ton_mi_mp
-from plotting_mp import plot_dynamic_network_results_mp
+from plotting_mp import plot_dynamic_network_results_mp, plot_results_mp
 from input_output import extract_assert_scenario_mp_inputs
 
 
@@ -76,9 +76,8 @@ def run_mp_scenario_file(scenario_code: str, G: nx.DiGraph = None, plot=True):
         t0 = time.time()
         fig = None
         if plot:
-            fig = plot_dynamic_network_results_mp(G, time_horizon=time_horizon, fuel_type=fuel_type,
-                                                  additional_plots=True, max_flow=max_flow,
-                                                  time_step_label=time_horizon, title=scenario_code)
+            fig = plot_results_mp(G, time_horizon=time_horizon, fuel_type=fuel_type, additional_plots=True,
+                                  max_flow=max_flow, time_step_label=time_horizon, title=scenario_code)
         print('PLOTTING:: %s seconds ---' % round(time.time() - t0, 3))
     elif fuel_type == 'hydrogen':
         G.graph['scenario'] = dict(railroad=rr, range_mi=range_km * KM2MI, range_km=range_km, fuel_type=fuel_type,
@@ -137,9 +136,8 @@ def run_mp_scenario_file(scenario_code: str, G: nx.DiGraph = None, plot=True):
         t0 = time.time()
         fig = None
         if plot:
-            fig = plot_dynamic_network_results_mp(G, time_horizon=time_horizon, fuel_type=fuel_type,
-                                                  additional_plots=True, max_flow=max_flow,
-                                                  time_step_label=time_horizon, title=scenario_code)
+            fig = plot_results_mp(G, time_horizon=time_horizon, fuel_type=fuel_type, additional_plots=True,
+                                  max_flow=max_flow, time_step_label=time_horizon, title=scenario_code)
         print('PLOTTING:: %s seconds ---' % round(time.time() - t0, 3))
 
     return G, fig

@@ -12,26 +12,36 @@ purple, mid_purple, light_purple, green1, green2, green3, green4, green5, red, l
 c = plotly.colors.qualitative.G10
 
 
+def plot_results_mp(G, time_horizon, fuel_type, crs='WGS84', additional_plots=False, max_flow=False,
+                    colors=False, time_step_label=False, title=None):
+
+    fig = [plot_dynamic_network_results_mp(G=G, time_horizon=time_horizon, fuel_type=fuel_type, crs=crs,
+                                           additional_plots=additional_plots, max_flow=max_flow, colors=colors,
+                                           time_step_label=time_step_label, title=title),
+           plot_composite_network_results_mp(G=G, time_horizon=time_horizon, fuel_type=fuel_type, title=title)]
+
+    return fig
+
+
 def plot_dynamic_network_results_mp(G, time_horizon, fuel_type, crs='WGS84', additional_plots=False, max_flow=False,
-                                    colors=False, time_step_label=False, title=None, fig=None):
-    if fig is None:
-        if additional_plots:
-            fig = make_subplots(
-                rows=1, cols=2,
-                specs=[[{"type": "table"}, {"type": "scattergeo"}]],
-                # rows=2, cols=2,
-                # specs=[[{"type": "table", 'rowspan': 2}, {"type": "scattergeo", "rowspan": 2}],
-                #        [None, None]],
-                column_widths=[0.2, 0.8],
-                row_heights=[1],
-                horizontal_spacing=0.1,
-                # vertical_spacing=0.1,
-                subplot_titles=['Scenario', title if title else 'Network']
-            )
-        else:
-            t0 = time.time()
-            fig = base_plot(G.graph['railroad'])
-            print('\t LOAD BASE PLOT:: ' + str(time.time() - t0))
+                                    colors=False, time_step_label=False, title=None):
+    if additional_plots:
+        fig = make_subplots(
+            rows=1, cols=2,
+            specs=[[{"type": "table"}, {"type": "scattergeo"}]],
+            # rows=2, cols=2,
+            # specs=[[{"type": "table", 'rowspan': 2}, {"type": "scattergeo", "rowspan": 2}],
+            #        [None, None]],
+            column_widths=[0.2, 0.8],
+            row_heights=[1],
+            horizontal_spacing=0.1,
+            # vertical_spacing=0.1,
+            subplot_titles=['Scenario', title if title else 'Network']
+        )
+    else:
+        t0 = time.time()
+        fig = base_plot(G.graph['railroad'])
+        print('\t LOAD BASE PLOT:: ' + str(time.time() - t0))
 
     # fig = plot_states_bg()
 
@@ -135,16 +145,16 @@ def plot_dynamic_network_results_mp(G, time_horizon, fuel_type, crs='WGS84', add
     add_slider_animation(fig)
 
     # fig.show()
-    iplot(fig)
+    # iplot(fig)
 
     return fig
 
 
-def plot_composite_network_results_mp(G, time_horizon, fuel_type, title=None, crs='WGS84', fig=None):
-    if fig is None:
-        t0 = time.time()
-        fig = base_plot(G.graph['railroad'])
-        print('\t LOAD BASE PLOT:: ' + str(time.time() - t0))
+def plot_composite_network_results_mp(G, time_horizon, fuel_type, title=None, crs='WGS84'):
+
+    t0 = time.time()
+    fig = base_plot(G.graph['railroad'])
+    print('\t LOAD BASE PLOT:: ' + str(time.time() - t0))
 
     t0 = time.time()
     # H = selected_subgraph(G=G, time_step=time_step)
