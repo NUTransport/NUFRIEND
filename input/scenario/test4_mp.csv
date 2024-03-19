@@ -4,7 +4,7 @@ fuel_type,battery,,,,,
 range_km,1000,,,,,
 max_flow,1,,,,,
 time_horizon,2025,2030,2035,2040,2045,2050
-deployment_percs,0.2,0.4,0.6,0.8,0.85,0.95
+deployment_percs,0.2,0.4,0.6,0.8,0.90,0.95
 budgets,5,5,5,5,5,5
 discount_rates,1,0.9091,0.8264,0.7513,0.6830,6.830
 facility_info_filename,,,,,,
