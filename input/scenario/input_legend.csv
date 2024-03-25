@@ -1,7 +1,7 @@
 Keyword,Notes
 rr,Name of railroad network to use. Must match name of stored file.
 fuel_type,"Name of energy technology to use, possible technologies are: <battery>, <hyrdogen>, <e-fuel>, <biodiesel>, <hybrid2:1>, <hybrid1:1>."
-deployment_perc,"Target (minimum) percentage of available ton-miles to capture/serve with selected <fuel_type>. Allowed range is [0,1]. Ignored if (a) <max_flow> set to <1> or <True>, or if (b) <fuel_type> set to <hybrid2:1> or <hybrid1:1> ."
+deployment_perc,"Target (minimum) percentage of available ton-miles to capture/serve with selected <fuel_type>. Allowed range is [0,1]. Ignored if <max_flow> set to <1> or <True>."
 range_km,"Interfacility range (in km) for technologies requiring deployment of charging/refueling facilities. Required for <fuel_type> set to <battery>, <hybrid2:1>, and <hybrid1:1>. Optional for <fuel_type> set to <hydrogen>, otherwise default value is <1600> if none provided. Ignored for <fuel_type> set to <e-fuel> and <biodiesel>."
 max_flow,"Sets objective sense for facility location optimization for <fuel_type> set to <battery>, <hydrogen>, <hybrid2:1>, or <hybrid1:1>. <max_flow> set to <1> or <True> indicates flow maximization objective with a budget constraint (set by <budget>). <max_flow> set to <0> or <False> indicates a cost minimization objective with a flow capture constraint (set by <deployment_perc>). Ignored if <fuel_type> set to <e-fuel> or <biodiesel>."
 budget,"Optional value to set budget constraint for facility location problem. If no value is provided, budget is assumed to be infinite. Ignored if <max_flow> set to <0> or if <fuel_type> set to <e-fuel> or <biodiesel>. "

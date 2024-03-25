@@ -1,8 +1,8 @@
 Keyword,Value
-rr,USA1
+rr,WCAN
 fuel_type,hybrid2:1
-deployment_perc,0.5
-range_km,1600
+deployment_perc,0.9
+range_km,2500
 max_flow,0
 budget,0
 extend_graph,0
