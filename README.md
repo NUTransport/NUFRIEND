@@ -3,6 +3,10 @@ NUFRIEND is a comprehensive industry-oriented tool to simulate the deployment of
 
 Public Dashboard is available here: https://nufriend.transportation.northwestern.edu/. 
 
+Demonstration videos are available here:
+- NUFRIEND Dashboard: https://drive.google.com/file/d/1Dx1jz3Y2dil5v-HC94EwBk4utXNnyPcj/view?usp=share_link
+- NUFIREND Rollout Optimization Framework: https://drive.google.com/file/d/1GxRHQ3dJDNbQLOKKMjsPROvc0wGu8Ph9/view?usp=share_link
+
 For more details, please refer to https://www.transportation.northwestern.edu/research/featured-reports/locomotives.html.
 
 Project Sponsor: ARPA-E, U.S. Department of Energy
