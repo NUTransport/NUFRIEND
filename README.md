@@ -25,7 +25,7 @@ This research has been funded by the Advanced Research Projects Agency-Energy (A
 
 The Northwestern University Freight Rail Infrastructure & Energy Network Decarbonization (NUFRIEND) Dashboard is now available for public use on the NUTC website at:  https://nufriend.transportation.northwestern.edu.
 
-Here, users can analyze different decarbonization technologies and deployment strategies on US rail networks to understand the benefits and challenges of freight rail sustainability investments. Users can learn to use the dashboard by watching the Demo Video or reading the NUFRIEND Dashboard User Guide for more information. 
+Here, users can analyze different decarbonization technologies and deployment strategies on US rail networks to understand the benefits and challenges of freight rail sustainability investments. Users can learn to use the dashboard by watching the Demo Video or reading the NUFRIEND Dashboard User Guide for more information. Users may wish to use the included .yml file to reproduce a functional conda environment for this code package on their machine.
 
 In addition, NUTC has published a series of informational pieces, titled NUFRIEND Insights, that break down different problem components in greater depth.
 

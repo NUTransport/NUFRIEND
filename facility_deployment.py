@@ -90,7 +90,7 @@ def facility_network_cycle_ilp(G: nx.Graph, D: float, paths: list, od_flows: dic
     m.update()
     m.optimize()
     # extract solution values
-    x_val = m.getAttr('x', x).items()  # get facility placement values
+    x_val = m.getAttr('x', x)  # get facility placement values
     z_val = m.objval  # get objective fxn value
     # print('# Facilities:: %s' % sum(v for _, v in x_val))
     # print('Ton-miles captured:: %s' % sum(path_flows))
@@ -200,21 +200,17 @@ def facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: list, od_flo
     m.update()
     m.optimize()
     # extract solution values
-    x_val = m.getAttr('x', x).items()  # get facility placement values
-    zz_val = m.getAttr('x', z).items()
+    x_val = m.getAttr('x', x)  # get facility placement values
+    zz_val = m.getAttr('x', z)
     z_val = m.objval  # get objective fxn value
 
-    # print('# Facilities:: %s' % sum(v for _, v in x_val))
-    tm_capt = sum(path_flows[k] * zz_val[k][1] for k in range(len(cycle_adj_mat_list)))
-    # print('Ton-miles captured:: %s' % sum(path_flows[k] * zz_val[k][1] for k in range(len(cycle_adj_mat_list))))
-    # print('Percentage ton-miles captured:: %s' % (tm_capt / sum(od_flows.values())))
-    # print([path_info[k] for k in range(len(cycle_adj_mat_list)) if zz_val[k][1] == 1])
+    tm_capt = sum(path_flows[k] * zz_val[k] for k in range(len(cycle_adj_mat_list)))
     path_nodeids = [p.index.to_list() for p, _, _, _ in cycle_adj_mat_list]
 
     G.graph['framework'] = dict(
-        ods=[(path_nodeids[k][0], path_nodeids[k][-1]) for k in range(len(path_nodeids)) if zz_val[k][1]],
-        path_nodes=[path_nodeids[k] for k in range(len(path_nodeids)) if zz_val[k][1]],
-        path_edges=[node_to_edge_path(path_nodeids[k]) for k in range(len(path_nodeids)) if zz_val[k][1]],
+        ods=[(path_nodeids[k][0], path_nodeids[k][-1]) for k in range(len(path_nodeids)) if zz_val[k]],
+        path_nodes=[path_nodeids[k] for k in range(len(path_nodeids)) if zz_val[k]],
+        path_edges=[node_to_edge_path(path_nodeids[k]) for k in range(len(path_nodeids)) if zz_val[k]],
         tm_capt_perc=tm_capt / sum(od_flows.values()),
         tm_capt=tm_capt,
         # od_flows=od_flows,
@@ -255,35 +251,6 @@ def max_flow_facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: lis
 
     # adjacency matrix based on all pairs shortest path distances
     # extract path-based adjacency matrices for each shortest path from paths_od to apply to model constraints
-    # t0 = time.time()
-    # # START CORRIDOR EXAMPLE - COMMENT OUT
-    # # ['S48113001906', 'S48231001397', 'S48063001511', 'S48343001491', 'S22017000336', 'S22119000236', 'S22065000403']
-    # # [       1,             2,              3,              4,              5,               6,              7      ]
-    # od_keys = set((o, d) for o, d in od_flows.keys()).union(set((d, o) for o, d in od_flows.keys()))
-    # # Corridor 1:
-    # # od_flows_corr = {('S48113001906', 'S22065000403'): 100, ('S22119000236', 'S48231001397'): 10,
-    # #                  ('S48113001906', 'S22017000336'): 50, ('S48063001511', 'S22017000336'): 5}
-    # # od_flows_corr = {(1, 7): 100, (6, 2): 10, (1, 5): 50, (3, 5): 5}
-    # # Corridor 2:
-    # od_flows_corr = {('S48113001906', 'S22065000403'): 50, ('S22119000236', 'S48231001397'): 10,
-    #                  ('S48113001906', 'S22017000336'): 100, ('S48063001511', 'S22017000336'): 5}
-    # # od_flows_corr = {(1, 7): 50, (6, 2): 10, (1, 5): 100, (3, 5): 5}
-    # od_keys = od_keys.union(set(od_flows_corr.keys()))
-    # od_flows = {(o, d): od_flows_corr[o, d] if (o, d) in od_flows_corr.keys() else 0 for o, d in od_keys}
-    # paths = [shortest_path(G, source=o, target=d, weight='km') for o, d in od_flows.keys() if od_flows[o, d] > 0]
-    # # END CORRIDOR EXAMPLE
-
-    # # START RANDOM EXAMPLE - COMMENT OUT
-    # od_keys = set((o, d) for o, d in od_flows.keys()).union(set((d, o) for o, d in od_flows.keys()))
-    # ods_select = list(od_keys).copy()
-    # seed = 1000
-    # num_ods = 500
-    # np.random.seed(seed)
-    # od_flows_rand = dict(zip(ods_select[:num_ods], np.random.randint(low=1, high=10000, size=num_ods)))
-    # od_keys = od_keys.union(set(od_flows_rand.keys()))
-    # od_flows = {(o, d): od_flows_rand[o, d] if (o, d) in od_flows_rand.keys() else 0 for o, d in od_keys}
-    # paths = [shortest_path(G, source=o, target=d, weight='km') for o, d in od_flows.keys() if od_flows[o, d] > 0]
-    # # END RANDOM EXAMPLE
 
     cycle_adj_mat_list = cycle_adjacency_matrix(G, paths, D)
     # print('CYCLE ADJACENCY MATRIX:: ' + str(time.time() - t0))
@@ -298,8 +265,6 @@ def max_flow_facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: lis
         # extract path flow along path <p> based on <od_flows> and specific path O-D pair (<o>, <n>)
         path_flows.append(od_flows[o, n] if (o, n) in od_flows.keys() else 0)
 
-    # print('Total OD flow:: %.0f' % sum(od_flows.values()))
-
     # set up model
     m = gp.Model('Facility Network Problem', env=gurobi_suppress_output(suppress_output))
     # add new variables - for facility location
@@ -311,16 +276,6 @@ def max_flow_facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: lis
     # add objective fxn
     m.setObjective(gp.quicksum(z[k] * path_flows[k] for k in range(len(cycle_adj_mat_list))), GRB.MAXIMIZE)
     # add path coverage constraints
-
-    # # START SET NODES
-    # facility_ids = ['S47151000103', 'S51550001469', 'S1073000406', 'S17179002310', 'S29189001087', 'S18089000359',
-    #                 'S19179001790', 'S29077001850', 'S29095000814', 'S46035000568', 'S20079001634', 'S31137001646',
-    #                 'S31045000027', 'S48343001491', 'S27003001256', 'S27173001726', 'S30085000307', 'S30077000681',
-    #                 'S38015001138', 'S46013000076', 'S56013000257', 'S35009000443', 'S35049000167', 'S4017000236',
-    #                 'S8009001357', 'S48439001558', 'S42003001832', 'S48201004876', 'S53063000457', 'S6071002652']
-    # for nf in facility_ids:
-    #     m.addConstr(x[nf] == 1, name='set_fac' + str(nf))
-    # # END SET NODES
 
     for k in range(len(cycle_adj_mat_list)):
         ca, cao, can, cac = cycle_adj_mat_list[k]
@@ -365,13 +320,12 @@ def max_flow_facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: lis
     m.addConstr(gp.quicksum(x[n] for n in node_list) <= budget, name='budget')
 
     # write ILP model
-    # m.write('/Users/adrianhz/Desktop/KCS_test_P2P_ILP.lp')
     # optimize
     m.update()
     m.optimize()
     # extract solution values
-    x_val = m.getAttr('x', x).items()  # get facility placement values
-    zz_val = m.getAttr('x', z).items()
+    x_val = m.getAttr('x', x)  # get facility placement values
+    zz_val = m.getAttr('x', z)
     z_val = m.objval  # get objective fxn value
     # print('# Facilities:: %s' % sum(v for _, v in x_val))
     # print('Ton-miles captured:: %s' % z_val)
@@ -380,9 +334,9 @@ def max_flow_facility_network_cycle_ilp_select(G: nx.Graph, D: float, paths: lis
     path_nodeids = [p.index.to_list() for p, _, _, _ in cycle_adj_mat_list]
     if 'framework' in G.graph.keys():
         G.graph['framework'] = dict(
-            ods=[(path_nodeids[k][0], path_nodeids[k][-1]) for k in range(len(path_nodeids)) if zz_val[k][1]],
-            path_nodes=[path_nodeids[k] for k in range(len(path_nodeids)) if zz_val[k][1]],
-            path_edges=[node_to_edge_path(path_nodeids[k]) for k in range(len(path_nodeids)) if zz_val[k][1]],
+            ods=[(path_nodeids[k][0], path_nodeids[k][-1]) for k in range(len(path_nodeids)) if zz_val[k]],
+            path_nodes=[path_nodeids[k] for k in range(len(path_nodeids)) if zz_val[k]],
+            path_edges=[node_to_edge_path(path_nodeids[k]) for k in range(len(path_nodeids)) if zz_val[k]],
             tm_capt_perc=z_val / sum(od_flows.values()),
             tm_capt=z_val,
             # od_flows=od_flows,
@@ -1076,7 +1030,7 @@ def path_adjacency_matrix(G: nx.Graph, paths: list, D: float):
     return path_adj_mats
 
 
-def fac_nodeids_lp_sol(x_val: list):
+def fac_nodeids_lp_sol(x_val: dict):
     # not relevant if solution is integer
 
     # analyze solution output by LP and convert to list of selected facilities
@@ -1084,7 +1038,7 @@ def fac_nodeids_lp_sol(x_val: list):
     not_selected = []  # list of facility locations not selected by nodeid
     eps = 1e-4  # margin of error for integrality
     # for each decision variable in the solution
-    for i, v in x_val:
+    for i, v in x_val.items():
         # if its value is sufficiently great to be considered a selection; x_i~=1 means i is selected
         if v >= (1 - eps):
             # append the nodeid to list of selected facilities

@@ -147,7 +147,7 @@ def load_hybrid_energy_intensity_values():
 def load_flow_data_df_csv(filename: str, rr: str):
 
     df = pd.read_csv(os.path.join(FLOW_DIR, filename), header=0,
-                     index_col=['Railroad', 'Origin-Destination SPLC', 'Commodity Group Name'])
+                     index_col=['Railroad', 'Origin-Destination SPLC', 'Commodity Group Name'], low_memory=False)
 
     df.drop(columns=list(set(df.columns).difference({'Tons'})), inplace=True)
 
@@ -162,7 +162,7 @@ def load_flow_data_date_df_csv(filename: str, rr: str):
 
     df = pd.read_csv(os.path.join(FLOW_DIR, filename), header=0,
                      index_col=['Railroad', 'Origin-Destination SPLC',
-                                'Commodity Group Name', 'Time Window (SmmddccyyEmmddccyy)'])
+                                'Commodity Group Name', 'Time Window (SmmddccyyEmmddccyy)'], low_memory=False)
 
     df = extract_rr(df, rr)  # filter out specific railroad
 
